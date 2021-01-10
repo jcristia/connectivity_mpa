@@ -1,0 +1,31 @@
+name: opendrift_mpaconn
+channels:
+  - opendrift
+  - conda-forge
+  - NOAA-ORR-ERD
+dependencies:
+  - python>=3.7
+  - matplotlib>=3.1
+  - numpy>=1.15.4
+  - scipy>=1.2.0
+  - netcdf4
+  - ffmpeg
+  - pyproj>=2.3
+  - libgdal>=3.1
+  - gdal>=3.1
+  - xarray
+  - dask
+  - xhistogram
+  - requests
+  - pytest
+  - pytest-cov
+  - pytest-benchmark
+  - cartopy
+  - nc-time-axis
+  - opendrift-landmask-data
+  - oil_library-opendrift
+  - pygrib
+  - isodate
+  - pip
+  - pip:
+    - motuclient

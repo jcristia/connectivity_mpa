@@ -1,0 +1,21 @@
+# Compiled python modules.
+*.pyc
+__pycache__
+.coverage
+
+# Setuptools distribution folder.
+/dist/
+build
+
+# Python egg metadata, regenerated from source files by setuptools.
+/*.egg-info
+/*.egg
+/*.eggs
+/MyTests/
+/docs/
+/.project
+/.pydevproject
+
+examples/openoil_sample_output.nc
+examples/oil3Dmixing.nc
+
