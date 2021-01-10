@@ -155,3 +155,6 @@ arcpy.CopyFeatures_management('landmask_dissolve', 'landmask_manualedit')
 # convert to shapefile
 arcpy.CopyFeatures_management('landmask_manualedit', 'landmask_FINAL')
 arcpy.FeatureClassToShapefile_conversion('landmask_FINAL', r"C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\Coastline")
+
+# project (opendrift needs WGS84, but I still want the BC Albers version for mapping)
+arcpy.Project_management(r"C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\Coastline\landmask_FINAL.shp", r"C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\Coastline\landmask_FINAL_wgs84.shp", arcpy.SpatialReference(4326))
