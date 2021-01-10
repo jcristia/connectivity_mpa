@@ -115,12 +115,13 @@ vsh = vsh[:,tmask]
 # Reshape, remove landpoints, and save to local netCDF path
 ds = xr.Dataset(
     {
-        'longitude': ('flat', grid.nav_lon.values[:].reshape(-1)[tmask]), # the flat references that it is the total amount of lat-lon pairs that the u and v are represented along, as opposed to separately. It is the dimension amount.
-        'latitude': ('flat', grid.nav_lat[:].values.reshape(-1)[tmask]),
+        'x': ('flat', grid.nav_lon.values[:].reshape(-1)[tmask]), # the flat references that it is the total amount of lat-lon pairs that the u and v are represented along, as opposed to separately. It is the dimension amount.
+        'y': ('flat', grid.nav_lat[:].values.reshape(-1)[tmask]),
         'u': (['time', 'flat'], ush, {'standard_name': 'x_sea_water_velocity'}),
         'v': (['time', 'flat'], vsh, {'standard_name': 'y_sea_water_velocity'}),
     },
     coords={'time': time}
+    # xarray reformats time so that the origin is just the start of the dataset and the units are the smallest difference in time step (which is hours in this case). Very handy.
 ).to_netcdf(forcing_path)
 
 
