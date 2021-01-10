@@ -3,6 +3,7 @@
 # except these files/folders
 !.gitignore
 !scripts/
+!opendrift-1.4.2/
 
 # then exclude specific folder and file types
 output
