@@ -115,8 +115,8 @@ vsh = vsh[:,tmask]
 # Reshape, remove landpoints, and save to local netCDF path
 ds = xr.Dataset(
     {
-        'x': ('flat', grid.nav_lon.values[:].reshape(-1)[tmask]), # the flat references that it is the total amount of lat-lon pairs that the u and v are represented along, as opposed to separately. It is the dimension amount.
-        'y': ('flat', grid.nav_lat[:].values.reshape(-1)[tmask]),
+        'longitude': ('flat', grid.nav_lon.values[:].reshape(-1)[tmask]), # the flat references that it is the total amount of lat-lon pairs that the u and v are represented along, as opposed to separately. It is the dimension amount.
+        'latitude': ('flat', grid.nav_lat[:].values.reshape(-1)[tmask]),
         'u': (['time', 'flat'], ush, {'standard_name': 'x_sea_water_velocity'}),
         'v': (['time', 'flat'], vsh, {'standard_name': 'y_sea_water_velocity'}),
     },
