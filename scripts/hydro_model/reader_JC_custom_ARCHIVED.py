@@ -1,3 +1,31 @@
+# JC
+# I'm no longer using this, but I will save it for reference.
+# It is from the most recent version of opendrift. The unstructured reader has now changed to being specific to fvcom, which no longer works for my data. This created a challenge because both the ROMS reader and Generic reader now strictly enforce that the model is on a structured grid (which the ROMS reader did not before).
+# Since this is specific to FVCOM now, I went through to try to change variable names.
+# However, I then realized that it is no longer do any interpolation when it goes to pull a variable value for a location that may exist between points. It simply gets the value from the nearest point. It is clearly still in development and it even says that you would need to develop your own interpretter based on the grid references.
+# Therefore, I am abandoning this effort and just using an older version.
+# If for some reason I cam back to this, here is what was still on my to do list:
+
+# Reader
+# 	* I don't have a sigma variable.
+# 	* around line 305, prevent it from going to that function. I think it just returns 1 number anyways.
+# 	* at 309, dvar woudl be referening a varibale like u. I think mine will only exist on 2 dimensions (time and xy)
+# 		* check this. Open up the dataset with netcdf4. See what dimensions it has when I refer to it (self.dataset[var]).
+# 	* remove the z dimension when it creates block and then when it picks the nearest
+
+# SalishSeaCast data:
+# 	* rename the folder of data I used for chapter 1
+# 	* I need to remake the ssc data so that the variable names match
+# 	* create NEW hydro model prep script in MPA connectivity repo for ssc. Its clear that the existing one is very specific to the NEP model data.
+# 	* I pretty much just need to change the variable names I think.
+# 	* Make sure that the time_origin and units get output the same way.
+# 	* DO THIS FOR JUST 1 DATASET for now. I need to move forward with testing.
+# 	* DON'T bother with automating it so that it does all of them at once.
+
+
+
+
+
 # This file is part of OpenDrift.
 #
 # OpenDrift is free software: you can redistribute it and/or modify
