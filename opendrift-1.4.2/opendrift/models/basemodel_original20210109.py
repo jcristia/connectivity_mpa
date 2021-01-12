@@ -1,5 +1,3 @@
-# JC edits where ogr gets imported. It was giving me an error. You have to import from osgeo.
-
 # This file is part of OpenDrift.
 #
 # OpenDrift is free software: you can redistribute it and/or modify
@@ -1812,8 +1810,8 @@ class OpenDriftSimulation(PhysicsMethods):
         """Seeds elements within contours read from a shapefile"""
 
         try:
-            from osgeo import ogr
-            from osgeo import osr
+            import ogr
+            import osr
         except Exception as e:
             self.logger.warning(e)
             raise ValueError('OGR library is needed to read shapefiles.')
