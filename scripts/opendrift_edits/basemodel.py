@@ -951,6 +951,12 @@ class OpenDriftSimulation(PhysicsMethods):
         self.timer_start('main loop:readers')
         # Initialise ndarray to hold environment variables
         dtype = [(var, np.float32) for var in variables]
+        ############################
+        #  !!!!! JC EDITS !!!!!
+        ############################
+        dtype.append(('hd', np.float32))
+        ############################
+        self.logger.debug(dtype)
         env = np.ma.array(np.zeros(len(lon))*np.nan, dtype=dtype)
 
         if not hasattr(self, 'fallback_values'):
@@ -1095,6 +1101,36 @@ class OpenDriftSimulation(PhysicsMethods):
                             if env_profiles[var].shape[0] > 1:
                                 missingbottom = np.isnan(env_profiles[var][-1,:])
                                 env_profiles[var][-1, missingbottom] = env_profiles[var][-2, missingbottom]
+
+                ############################
+                # !!! JC EDITS !!!
+                # values are hardcoded
+                ############################
+                self.logger.debug(reader)
+                if reader_name == 'NEP':
+                    # add in 20 to env['hd'] where x and y have values
+                    d = env['x_sea_water_velocity'].mask == False  # get x values that are not masked
+                    index = np.where(d) # get the indices of those values
+                    # remove from index if there is already a value for hd at those indices
+                    # or else it will just keep overwriting itself as more values get added that might be from other readers with a different value
+                    index2 = np.where(~np.isnan(env['hd']))
+                    index = np.setdiff1d(index, index2)
+                    env['hd'][index] = 20.0
+                    self.logger.debug(env)
+                elif reader_name == 'SSC':
+                    self.logger.debug(env)
+                    # add in 1.5 to env['hd'] where x and y have values
+                    d = env['x_sea_water_velocity'].mask == False  # get x values that are not masked
+                    index = np.where(d) # get the indices of those values
+                    # remove from index if there is already a value for hd at those indices
+                    # or else it will just keep overwriting itself as more values get added that might be from other readers with a different value
+                    index2 = np.where(~np.isnan(env['hd']))
+                    index = np.setdiff1d(index, index2)
+                    env['hd'][index] = 1.5
+                    self.logger.debug(env)
+                ############################
+                # !!!
+                ############################ 
 
                 # Detect elements with missing data, for present reader group
                 if hasattr(env_tmp[variable_group[0]], 'mask'):
@@ -1928,6 +1964,12 @@ class OpenDriftSimulation(PhysicsMethods):
 
     def horizontal_diffusion(self):
         """Move elements with random walk according to given horizontal diffuivity."""
+        
+        # idea for here:
+        # first output what self.environment looks like
+        if self.environment['hd']:
+            pass
+        
         D = self.get_config('drift:horizontal_diffusivity')
         if D == 0:
             self.logger.debug('Horizontal diffusivity is 0, no random walk.')
