@@ -1,4 +1,5 @@
 # JC edits where ogr gets imported. It was giving me an error. You have to import from osgeo.
+# ALSO, significant edits to how diffusion is incorporated for different models
 
 # This file is part of OpenDrift.
 #
@@ -951,11 +952,14 @@ class OpenDriftSimulation(PhysicsMethods):
         self.timer_start('main loop:readers')
         # Initialise ndarray to hold environment variables
         dtype = [(var, np.float32) for var in variables]
+
         ############################
         #  !!!!! JC EDITS !!!!!
+        # add a variable for horizontal diffusion
         ############################
         dtype.append(('hd', np.float32))
         ############################
+
         self.logger.debug(dtype)
         env = np.ma.array(np.zeros(len(lon))*np.nan, dtype=dtype)
 
@@ -1104,9 +1108,8 @@ class OpenDriftSimulation(PhysicsMethods):
 
                 ############################
                 # !!! JC EDITS !!!
-                # values are hardcoded
+                # values are hardcoded for the models
                 ############################
-                self.logger.debug(reader)
                 if reader_name == 'NEP':
                     # add in 20 to env['hd'] where x and y have values
                     d = env['x_sea_water_velocity'].mask == False  # get x values that are not masked
@@ -1116,18 +1119,12 @@ class OpenDriftSimulation(PhysicsMethods):
                     index2 = np.where(~np.isnan(env['hd']))
                     index = np.setdiff1d(index, index2)
                     env['hd'][index] = 20.0
-                    self.logger.debug(env)
                 elif reader_name == 'SSC':
-                    self.logger.debug(env)
-                    # add in 1.5 to env['hd'] where x and y have values
-                    d = env['x_sea_water_velocity'].mask == False  # get x values that are not masked
-                    index = np.where(d) # get the indices of those values
-                    # remove from index if there is already a value for hd at those indices
-                    # or else it will just keep overwriting itself as more values get added that might be from other readers with a different value
+                    d = env['x_sea_water_velocity'].mask == False
+                    index = np.where(d)
                     index2 = np.where(~np.isnan(env['hd']))
                     index = np.setdiff1d(index, index2)
                     env['hd'][index] = 1.5
-                    self.logger.debug(env)
                 ############################
                 # !!!
                 ############################ 
@@ -1250,23 +1247,23 @@ class OpenDriftSimulation(PhysicsMethods):
         #############################
         # Add uncertainty/diffusion
         #############################
-        # Current
-        if 'x_sea_water_velocity' in variables and \
-                'y_sea_water_velocity' in variables:
-            std = self.get_config('drift:current_uncertainty')
-            if std > 0:
-                self.logger.debug('Adding uncertainty for current: %s m/s' % std)
-                env['x_sea_water_velocity'] += np.random.normal(
-                    0, std, self.num_elements_active())
-                env['y_sea_water_velocity'] += np.random.normal(
-                    0, std, self.num_elements_active())
-            std = self.get_config('drift:current_uncertainty_uniform')
-            if std > 0:
-                self.logger.debug('Adding uncertainty for current: %s m/s' % std)
-                env['x_sea_water_velocity'] += np.random.uniform(
-                    -std, std, self.num_elements_active())
-                env['y_sea_water_velocity'] += np.random.uniform(
-                    -std, std, self.num_elements_active())
+        # # Current
+        # if 'x_sea_water_velocity' in variables and \
+        #         'y_sea_water_velocity' in variables:
+        #     std = self.get_config('drift:current_uncertainty')
+        #     if std > 0:
+        #         self.logger.debug('Adding uncertainty for current: %s m/s' % std)
+        #         env['x_sea_water_velocity'] += np.random.normal(
+        #             0, std, self.num_elements_active())
+        #         env['y_sea_water_velocity'] += np.random.normal(
+        #             0, std, self.num_elements_active())
+        #     std = self.get_config('drift:current_uncertainty_uniform')
+        #     if std > 0:
+        #         self.logger.debug('Adding uncertainty for current: %s m/s' % std)
+        #         env['x_sea_water_velocity'] += np.random.uniform(
+        #             -std, std, self.num_elements_active())
+        #         env['y_sea_water_velocity'] += np.random.uniform(
+        #             -std, std, self.num_elements_active())
         # Wind
         if 'x_wind' in variables and 'y_wind' in variables:
             std = self.get_config('drift:wind_uncertainty')
@@ -1276,6 +1273,35 @@ class OpenDriftSimulation(PhysicsMethods):
                     0, std, self.num_elements_active())
                 env['y_wind'] += np.random.normal(
                     0, std, self.num_elements_active())
+        ##############
+        # !!! JC EDITS !!!
+        # Current
+        if 'x_sea_water_velocity' in variables and \
+                'y_sea_water_velocity' in variables:
+            std = self.get_config('drift:current_uncertainty')
+            if std > 0:
+                self.logger.debug('Adding uncertainty for current: %s m/s' % std)
+                env['x_sea_water_velocity'] += np.random.normal(
+                    0, std, self.num_elements_active())
+                env['y_sea_water_velocity'] += np.random.normal(
+                    0, std, self.num_elements_active())            
+            elif 'hd' in env.dtype.names:
+                D = env['hd']
+                dt = self.time_step.total_seconds()                
+                std = np.sqrt(2*D/dt)
+                self.logger.debug('Adding uncertainty for current: m/s')
+                env['x_sea_water_velocity'] += np.random.normal(
+                    0, std, self.num_elements_active())
+                env['y_sea_water_velocity'] += np.random.normal(
+                    0, std, self.num_elements_active())            
+            std = self.get_config('drift:current_uncertainty_uniform')
+            if std > 0:
+                self.logger.debug('Adding uncertainty for current: %s m/s' % std)
+                env['x_sea_water_velocity'] += np.random.uniform(
+                    -std, std, self.num_elements_active())
+                env['y_sea_water_velocity'] += np.random.uniform(
+                    -std, std, self.num_elements_active())
+
 
         #####################
         # Diagnostic output
@@ -1964,12 +1990,6 @@ class OpenDriftSimulation(PhysicsMethods):
 
     def horizontal_diffusion(self):
         """Move elements with random walk according to given horizontal diffuivity."""
-        
-        # idea for here:
-        # first output what self.environment looks like
-        if self.environment['hd']:
-            pass
-        
         D = self.get_config('drift:horizontal_diffusivity')
         if D == 0:
             self.logger.debug('Horizontal diffusivity is 0, no random walk.')
