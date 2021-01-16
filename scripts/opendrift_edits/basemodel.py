@@ -1,4 +1,5 @@
 # JC edits where ogr gets imported. It was giving me an error. You have to import from osgeo.
+# ALSO significant edits to how diffusion is incorporated for different models
 
 # This file is part of OpenDrift.
 #
