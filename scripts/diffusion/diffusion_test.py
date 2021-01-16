@@ -96,4 +96,9 @@ plt.show
 # I like the way it gets calculated in opendrift at the very end. This is more what I think of when I think of a random kick.
 # Also, it will be easier to write about than explaining how I calculated current_uncertainty.
 
-# I compared the two in a simulation and they are pretty much identical.
+# !!! I compared the two in a simulation and they are pretty much identical.
+
+# UPDATED DECISION:
+# because I have now added custom code to basemodel so that I can use different 
+# horizontal diffusion rates for each model, it is now only setup to use with
+# current_uncertainty. It was more straightforward to code this way.
