@@ -8,6 +8,7 @@
 # It now applies settlement at each time step just for particles that stranded.
 # At the end of each specified PLD, it will then settle particles that are still
 # active but are over a nearshore MPA.
+# This change to settlement ended up requiring a lot of changes throughout.
 
 # John Cristiani
 # University of British Columbia
@@ -23,6 +24,7 @@ from shapely.geometry import shape, Point, LineString, Polygon
 import pandas as pd
 import geopandas
 import logging
+import math
 import os
 logging.basicConfig(level=logging.INFO)
 
@@ -92,7 +94,7 @@ backwards_run = False
 # mortality is random and I want all PLDs done on one random selection of 
 # particles instead of on different selections.
 # Provide PLDs in a list in units of days
-plds = [1, 2, 3]
+plds = [1, 2]
 
 
 
@@ -128,7 +130,7 @@ def get_particle_originPoly(
     df['o_coords'] = list(zip(lons, lats))
     df['o_coords'] = df['o_coords'].apply(Point)
     df['traj_id'] = list(traj)
-    df['origin_marker'] = om
+    df['uID_part'] = om
     points = geopandas.GeoDataFrame(df, geometry='o_coords')
     points.crs = {'init' :'epsg:4326'}
     points = points.to_crs(crs_input_shp)
@@ -176,13 +178,15 @@ def calc_precomp(
 
 
 ###################
-# settle a particle when it drifts over a release_polys patch
-# account for precompetency period
+# settlement
+# associate a particle with a poly if it strands on the coast on it
+# or if it is over it at the end of a PLD period
 ###################
 
 def settlement(
     settlement_apply, origin, shp_og_buff, timestep, status, lon, lat, traj, 
-    crs_input_shp, precomp, precomp_range, particle_range, pld_int):
+    crs_input_shp, precomp, precomp_range, particle_range, pld_int,
+    timesteps_with_release):
 
     poly  = geopandas.GeoDataFrame.from_file(shp_og_buff)
     poly.crs = crs_input_shp
@@ -191,61 +195,86 @@ def settlement(
     if settlement_apply: # if this is false, then it will just join the blank 
         # dest_df to origin, and the get_destination_coords function will fill 
         # in the rest. This would be if you just want the points shapefile.
-        for i in range(1,pld_int+1)): 
 
-            output_str = "settlement time step " + str(i) + " of " + str(pld_int)
-            logging.info(output_str)
+        for ts_i in range(0,len(timesteps_with_release)):
+            # I am applying active settlement at the end of each pld period,
+            # However, since some particles are on a delay release, I need to account
+            # for the pld plus the additional timesteps that they were delayed
 
-            # get traj ids for particles that are active or where they were 
-            # active on the previous step (just stranded)
-            # NOTE: special case I may need to fix in the future: when running 
-            # backwards I had a particle that was 1 on the very first time step. 
-            # However, since it always seems to mask them after they are 1, I 
-            # could just select where == 1 and not worry about if the previous 
-            # step was 0.
-            t_strand = traj[np.where((status[:,[i]] == 1) & (status[:,[i-1]] == 0))[0]]
-            if i == pld_int: # only check on the last time step
-                t_active = traj[np.where(status[:,[i]] == 0)[0]]
-        
-            # if we already settled it on a previous iteration of the for loop 
-            # then remove it from the list so we don't check it again
-            t_strand = np.setdiff1d(t_strand, dest_df.traj_id.values)
-            if i == pld_int:
-                t_active = np.setdiff1d(t_active, dest_df.traj_id.values)
+            ts = timesteps_with_release[ts_i]
+            particles = list(range(particle_range[ts_i][0],particle_range[ts_i][1]))
 
-            if precomp > 0: # remove from p_active ones that are in their precomp period
-                for period in precomp_range:
-                    if i in range(period[0],period[1]):
-                        period_index = precomp_range.index(period)
-                        # get particles that are still in their precomp period
-                        p_in_precomp = range(particle_range[period_index][0],particle_range[period_index][1])
-                        if i == pld_int:
-                            t_active = np.setdiff1d(t_active, p_in_precomp)
+            logging.info(
+                "Processing settlement for particle_range {} out of {}".format(particle_range[ts_i], particle_range[-1][-1]))
 
-            if i == pld_int:
-                t = np.concatenate((t_strand,t_active))
-            else:
-                t = t_strand
+            for i in range(ts+1,ts+pld_int+1):
 
-            if len(t) == 0:
-                continue
+                if i == len(status[0]):
+                    # PLD_int is now larger than time steps
+                    # e.g. a 60 day pld, but everything settled by day 25
+                    break 
 
-            # t is the actual trajectory ID, the index for that value is 1 less
-            lons = lon[t-1,i]
-            lats = lat[t-1,i]
+                # output_str = "settlement time step " + str(i) + " of " + str(pld_int)
+                # logging.info(output_str)
 
-            df = pd.DataFrame()
-            df['d_coords'] = list(zip(lons, lats))
-            df['d_coords'] = df['d_coords'].apply(Point)
-            df['traj_id'] = list(t)
-            points = geopandas.GeoDataFrame(df, geometry='d_coords')
-            points.crs = {'init' :'epsg:4326'}
-            points = points.to_crs(crs_input_shp)
-            # This should be 1:M join. A point can overlap many MPAs:
-            pointInPolys = geopandas.tools.sjoin(points, poly, how='inner')
-            pointInPolys = pointInPolys.rename(columns={'uID_202011':'dest_id'})
-            pointInPolys['time_int'] = i
-            dest_df = dest_df.append(pointInPolys[['d_coords','traj_id','dest_id','time_int']], ignore_index=True)
+                # get traj ids for particles that are active or where they were 
+                # active on the previous step (just stranded)
+                # NOTE: special case I may need to fix in the future: when running 
+                # backwards I had a particle that was 1 on the very first time step. 
+                # However, since it always seems to mask them after they are 1, I 
+                # could just select where == 1 and not worry about if the previous 
+                # step was 0.
+                t_strand = traj[np.where((status[:,[i]] == 1) & (status[:,[i-1]] == 0))[0]]
+                if i == ts+pld_int: # only check on the last time step
+                    t_active = traj[np.where(status[:,[i]] == 0)[0]]
+                
+                # remove particles that are not part of the current particle range
+                mask = np.isin(t_strand, particles)
+                t_strand = t_strand[mask]
+                if i == ts+pld_int:
+                    mask = np.isin(t_active, particles)
+                    t_active = t_active[mask]          
+
+                # if we already settled it on a previous iteration of the for loop 
+                # then remove it from the list so we don't check it again
+                t_strand = np.setdiff1d(t_strand, dest_df.traj_id.values)
+                if i == ts+pld_int:
+                    t_active = np.setdiff1d(t_active, dest_df.traj_id.values)
+
+                if i == ts+pld_int:
+                    if precomp > 0: # remove from p_active ones that are in their precomp period
+                        for period in precomp_range:
+                            if i in range(period[0],period[1]):
+                                period_index = precomp_range.index(period)
+                                # get particles that are still in their precomp period
+                                # don't need to do -1, since setdiff1d is based on values no index
+                                p_in_precomp = range(particle_range[period_index][0],particle_range[period_index][1])
+                                t_active = np.setdiff1d(t_active, p_in_precomp)
+
+                if i == ts+pld_int:
+                    t = np.concatenate((t_strand,t_active))
+                else:
+                    t = t_strand
+
+                if len(t) == 0:
+                    continue
+
+                # t is the actual trajectory ID, the index for that value is 1 less
+                lons = lon[t-1,i]
+                lats = lat[t-1,i]
+
+                df = pd.DataFrame()
+                df['d_coords'] = list(zip(lons, lats))
+                df['d_coords'] = df['d_coords'].apply(Point)
+                df['traj_id'] = list(t)
+                points = geopandas.GeoDataFrame(df, geometry='d_coords')
+                points.crs = {'init' :'epsg:4326'}
+                points = points.to_crs(crs_input_shp)
+                # This should be 1:M join. A point can overlap many MPAs:
+                pointInPolys = geopandas.tools.sjoin(points, poly, how='inner')
+                pointInPolys = pointInPolys.rename(columns={'uID_202011':'dest_id'})
+                pointInPolys['time_int'] = i
+                dest_df = dest_df.append(pointInPolys[['d_coords','traj_id','dest_id','time_int']], ignore_index=True)
     
     # join the two tables
     logging.info("merging destination and origin dataframes")
@@ -263,7 +292,14 @@ def settlement(
     return origin_dest
 
 ###################
-# add the final destination coordinates to particles that did not settle on a patch
+# Add the final destination coordinates to particles that did not settle on a patch
+# The was originally not set up to deal with the PLD and settlement as I have it
+# now. So, as of now I am just running this for PLD of 60. That is the only one
+# where it is relevant to see where particles ended up that did not settle.
+# In the future, I could revisit this and make it so that I find the location of
+# particles at the end of a PLD. However, this would require dealing with the
+# delayed release issue. Since I don't use the dest_pts shapefiles for much, I
+# am just going to let this go for now.
 ###################
 
 def get_destination_coords(origin_dest, traj, lon, lat, timestep, crs_input_shp, status):
@@ -273,27 +309,22 @@ def get_destination_coords(origin_dest, traj, lon, lat, timestep, crs_input_shp,
     lats_dest = []
     time_steps = []
     for i in range(len(traj)):
-        if np.ma.is_masked(lon[i][-1]): # if the last value is masked (but really just to check if any values are masked, similar to getParticleOriginPoly). If it is masked then it must have stranded, and therefore we can search by where it is 1.
-            # changed this statement from '== 1' to '> 0'. I found that if a particle goes outside of the grid it gets coded as '2 - missing data'. Opendrift says that anything above 0 is considered deactivated, so the actual number doesn't matter (at least for my purposes, just that it is bigger than 0.
+        if np.ma.is_masked(lon[i][-1]):
+            # if the last value is masked then it must have stranded and we can 
+            # search by where it is 1.
+
+            # If a particle goes outside of the grid it gets coded as '2 - 
+            # missing data'. Anything above 0 is considered deactivated.
             j = np.where(status[i] > 0)[0][0]
             lo = lon[i][j]
             lons_dest.append(lo)
             la = lat[i][j]
             lats_dest.append(la)
 
-            # old way
-            #lons_dest.append(lon[i][lon[i].mask==False][-1]) # get the last coordinate where it is not masked
-            #lats_dest.append(lat[i][lat[i].mask==False][-1])
-
             # timestep
             index = j
             time_steps.append(index)
-            # old way
-            # this is an optimized way to get the last time step
-            # it flips the masking, then gets locations where masking is True, then I just take the last one
-            #d = status[i].mask == False
-            #index = np.where(d)
-            #time_steps.append(index[0][-1])
+
         else: # otherwise just get the last coordinate
             lons_dest.append(lon[i][-1])
             lats_dest.append(lat[i][-1])
@@ -308,17 +339,6 @@ def get_destination_coords(origin_dest, traj, lon, lat, timestep, crs_input_shp,
     points_dest.crs = {'init' :'epsg:4326'}
     points_dest = points_dest.to_crs(crs_input_shp)
 
-    # this takes a long time. Should consider how to optimize it.
-    #df1 = origin_dest[origin_dest.dest_id.isnull()]
-    #for row in df1.itertuples(index=True):
-    #    traj_id = row[2]
-    #    dcoords = points_dest.loc[points_dest['traj_id'] == traj_id, 'Coordinates'].iloc[0]
-    #    time = points_dest.loc[points_dest['traj_id'] == traj_id, 'time_step'].iloc[0]
-    #    origin_dest['d_coords'][row[0]] = dcoords
-    #    origin_dest['time_int'][row[0]] = time
-
-    # I was originally doing itertuples, which I found out is extremely slow and a big no-no.
-    # stick with vectorization when possible
     # join, fill in values where null, remove columns
     logging.info("joining destination coordinates to dataframe")
     points_dest = points_dest.infer_objects()
@@ -338,7 +358,9 @@ def get_destination_coords(origin_dest, traj, lon, lat, timestep, crs_input_shp,
 # calculate mortality
 ###################
 
-def calc_mortality(mortality_rate, traj, timestep, origin_dest, time_step_output, mort_period, interval_of_release, num_of_releases):
+def calc_mortality(
+    mortality_rate, traj, timestep, origin_dest, time_step_output, mort_period, 
+    timesteps_with_release, particle_range):
 
     logging.info("calculating mortality")
 
@@ -347,27 +369,14 @@ def calc_mortality(mortality_rate, traj, timestep, origin_dest, time_step_output
     if mortality_rate > 0:
         timestep_days = time_step_output / 24   # proportion of a day for one timestep
         mort_timesteps = np.arange(0, len(timestep)-1, mort_period)   # timesteps to apply mortality
-        # run all this by dad and Patrick
         # instantaneous mortality rate for the mortality application interval
         inst_rate = 1 - (math.exp(math.log(1-mortality_rate) * (timestep_days * mort_period)))
-        # so as long as the interval that I calculate mortality stays the same throughout a simulation, I don't need to worry about a changing rate or how many new particles enter the system
+        # so as long as the interval that I calculate mortality stays the same 
+        # throughout a simulation, I don't need to worry about a changing rate 
+        # or how many new particles enter the system
 
-        # need to not consider particles that are not released yet, so find the periods and particles ranges
-        # timesteps when particles are released
-        timesteps_with_release = []
-        for release in range(num_of_releases):
-            ts = (float(interval_of_release) / float(time_step_output)) * release
-            timesteps_with_release.append(int(ts))
+        # need to not consider particles that are not released yet 
         timesteps_with_release = np.array(timesteps_with_release)
-        # particles in that period
-        particle_range = []
-        if num_of_releases == 1:
-            particle_range = [[1, len(traj) + 1]]
-        else:
-            for release in range(1,num_of_releases+1):
-                # Opendrift keeps particles in order that they are released. Hopefully this never changes.
-                p_range = [1 + ((release-1) * particles_per_release),(release * particles_per_release) +1]
-                particle_range.append(p_range)
         particle_range = np.array(particle_range)
 
         mortality_p = pd.DataFrame(columns=['traj_id','mortstep'])
@@ -387,7 +396,9 @@ def calc_mortality(mortality_rate, traj, timestep, origin_dest, time_step_output
             mortality_selection = np.setdiff1d(mortality_selection, mortality_p['traj_id'].values)
 
             # remove ones that have settled before this time step
-            # select from origin_dest where time_int is this timestep and where dest_id is not null (so actually settled somewhere, I can still killed stranded ones)
+            # select from origin_dest where time_int is this timestep and where 
+            # dest_id is not null (so actually settled somewhere, I can still 
+            # killed stranded ones)
             # .values turns the selection into a numpy array
             p_settled = origin_dest['traj_id'].loc[(origin_dest["time_int"] <= i) & (origin_dest['dest_id'].notnull())].values
             mortality_selection = np.setdiff1d(mortality_selection, p_settled)
@@ -400,23 +411,21 @@ def calc_mortality(mortality_rate, traj, timestep, origin_dest, time_step_output
             df = pd.DataFrame({'traj_id':mortality_selection, 'mortstep':i})
             mortality_p = mortality_p.append(df, ignore_index=True, sort=True)
 
-
-    # need to coerce merge. traj_id must be numeric. The dest_df data types were all "object"
-    # this was not a problem on windows, but when running on the cluster it woud give an error
     mortality_p = mortality_p.infer_objects()
     origin_dest = origin_dest.infer_objects()
     mortality_p.traj_id = mortality_p.traj_id.astype('float')
     origin_dest.traj_id = origin_dest.traj_id.astype('float')
     # join to origin_dest
+    # This could be a M:1 join (more than 1 particle with the same traj_id)
     origin_dest_mort = origin_dest.merge(mortality_p, on='traj_id', how='outer')
-    # we still want the join to happen even if mortality_p is empty. It will just make the column NaN which we later turn to -1.
-    # Since I will be doing a lot of runs and writing additional scripts to analyze the data, I think it is important that all data has the same columns, even if I didn't apply a mortality rate to it.
+    # we still want the join to happen even if mortality_p is empty. It will 
+    # just make the column NaN which we later turn to -1.
 
     return origin_dest_mort, mortality_p
 
 ###################
-# add in starting time interval
-# added 2020-01-13 so that we know the full time period of particles that may not have been released at the first time step
+# Add in starting time interval so that we know the full time period of 
+# particles that may not have been released at the first time step.
 # This allows us calculate different connections for different PLDs
 ###################
 
@@ -428,7 +437,6 @@ def start_time_int(origin_dest_mort, timesteps_with_release, particle_range, tra
     df['traj_id'] = list(traj)
 
     # starting time step of each particle
-    # this could probably be optimized
     time_int_start = []
     for t in range(len(timesteps_with_release)):
         for particle in range(particle_range[t][0],particle_range[t][1]):
@@ -436,8 +444,6 @@ def start_time_int(origin_dest_mort, timesteps_with_release, particle_range, tra
     
     df['time_int_s'] = time_int_start # name shortened for shapefile
 
-    # need to coerce merge. traj_id must be numeric. The dest_df data types were all "object"
-    # this was not a problem on windows, but when running on the cluster it woud give an error
     df = df.infer_objects()
     origin_dest_mort = origin_dest_mort.infer_objects()
     df.traj_id = df.traj_id.astype('float')
@@ -446,7 +452,15 @@ def start_time_int(origin_dest_mort, timesteps_with_release, particle_range, tra
 
     return origin_dest_mort
 
+####################
+# fill na with -1
+# this is to prevent Arc from turning them to 0 on export
+####################
 
+def fill_na(origin_dest_mort):
+    origin_dest_mort = origin_dest_mort.fillna(
+        value={'dcoords': -1, 'dest_id': -1, 'mortstep': -1})
+    return origin_dest_mort
 
 
 
@@ -465,37 +479,37 @@ def out_shp_dest_points(origin_dest_mort, crs_input_shp, shp_out, date_start):
     od = origin_dest_mort.drop(['o_coords'], axis=1)
     od = geopandas.GeoDataFrame(od, geometry='d_coords')
     od.crs = crs_input_shp
-    od = od.fillna(-1) # fill NaN with -1, otherwise NaN gets turned to 0 on export. This could be confusing when analyzing the data
     od['date_start'] = date_start
     od.to_file(filename=shp_out, driver='ESRI Shapefile')
 
 #### create connection lines ####
-def connection_lines(shp_out, shp_og, crs_input_shp, conn_lines_out, date_start, pld_int, pld):
+def connection_lines(origin_dest_mort, shp_og, crs_input_shp, conn_lines_out, date_start, pld_int, pld):
 
     logging.info("writing connection lines to shapefile")
-    od = geopandas.read_file(shp_out)
+    od = origin_dest_mort
     sg = geopandas.read_file(shp_og)
 
-    ### on od, select particles where time_int_s minus time_int is less than or equal to PLD
+    # on od, select particles where time_int_s minus time_int is less than or equal to PLD
     od_pld = od[(od.time_int - od.time_int_s <= pld_int)]
 
     # get each unique combination of originID and destID and get count of particles that survived
-    od_unique = od_pld[(od_pld.dest_id != -1) & (od_pld.mortstep == -1)].groupby(['uID','dest_id']).size().reset_index(name='Freq')
+    od_unique = od_pld[(od_pld.dest_id != -1) & (od_pld.mortstep == -1)].groupby(['uID_part','dest_id']).size().reset_index(name='Freq')
     # how to read this:
     # first we select from od the ones that settled and survived
     # then we groupby unique combinations of uID and dest_id
     # then we get the count of those unique combinations
-    # this normally makes uID the index and doesn't have a column name for count (the series we created), so we reset index and give the count a column name
+    # this normally makes uID the index and doesn't have a column name for count 
+    # (the series we created), so we reset index and give the count a column name
 
     # df of time interval where first settlement occurred
-    df_time_int = od_pld[(od_pld.dest_id != -1) & (od_pld.mortstep == -1)].groupby(['uID','dest_id'])['time_int'].min().reset_index(name='time_int')
+    df_time_int = od_pld[(od_pld.dest_id != -1) & (od_pld.mortstep == -1)].groupby(['uID_part','dest_id'])['time_int'].min().reset_index(name='time_int')
     
     # set up for creating self connection lines. Size of circle lines based on amount settled and average area of all patches.
     def CircleCoords(xLeft, yCenter, r, n): # credit: MGET. Also, see circle_coords.xlsx for explanation of equation.
         return [(xLeft + r - math.cos(2*math.pi/n*x)*r, math.sin(2*math.pi/n*x)*r + yCenter) for x in range(n+1)]
     # min and max quantities used for normalization
-    quantity_min = od_unique[od_unique.dest_id == od_unique.uID].Freq.min()
-    quantity_max = od_unique[od_unique.dest_id == od_unique.uID].Freq.max()
+    quantity_min = od_unique[od_unique.dest_id == od_unique.uID_part].Freq.min()
+    quantity_max = od_unique[od_unique.dest_id == od_unique.uID_part].Freq.max()
     # get average area
     area_mean = sg.area.mean()
     # get radius of a circle with this area
@@ -506,14 +520,14 @@ def connection_lines(shp_out, shp_og, crs_input_shp, conn_lines_out, date_start,
     conn_i = 0
     for row in od_unique.itertuples(index=False):
         # get total amount of particles released from patch
-        total = od.uID[od.uID ==  row[0]].value_counts().values[0]
+        total = od.uID_part[od.uID_part ==  row[0]].value_counts().values[0]
 
         # time interval where first settlement occurred
-        time_int = df_time_int[(df_time_int.uID == row[0]) & (df_time_int.dest_id == row[1])]['time_int'].values[0]
+        time_int = df_time_int[(df_time_int.uID_part == row[0]) & (df_time_int.dest_id == row[1])]['time_int'].values[0]
     
         # get centroid of from and to patches
-        centroid_origin = sg[sg.uID == row[0]].centroid
-        centroid_dest = sg[sg.uID == row[1]].centroid
+        centroid_origin = sg[sg.uID_202011 == row[0]].centroid
+        centroid_dest = sg[sg.uID_202011 == row[1]].centroid
 
         if row[0] != row[1]:
             geom_line = LineString([centroid_origin.tolist()[0], centroid_dest.tolist()[0]])
@@ -556,6 +570,12 @@ def out_shp_patch_centroids(shp_og, patch_centroids_out, crs_input_shp, date_sta
 # create output shp folder
 if not os.path.exists(output_shp_dir):
     os.makedirs(output_shp_dir)
+dest_pts_dir = os.path.join(output_shp_dir, 'dest_pts')
+if not os.path.exists(dest_pts_dir):
+    os.makedirs(dest_pts_dir)
+conn_lines_dir = os.path.join(output_shp_dir, 'conn_lines')
+if not os.path.exists(conn_lines_dir):
+    os.makedirs(conn_lines_dir)
 
 # get release shapefiles
 sg_files = os.listdir(input_shp_dir)
@@ -600,54 +620,56 @@ for shp in shapefiles:
         origin_marker, traj, crs_input_shp, lat_np, lon_np, backwards_run
         )
 
-    if precomp == 0:
-        timesteps_with_release = None
-        precomp_end_timestep = None
-        precomp_range = None
-        particle_range = None
-    else:
-        timesteps_with_release, precomp_end_timestep, \
-        precomp_range, particle_range = calc_precomp(
-            precomp, time_step_output, particles_per_release, 
-            interval_of_release, num_of_releases, traj
-            )
+    timesteps_with_release, precomp_end_timestep, \
+    precomp_range, particle_range = calc_precomp(
+        precomp, time_step_output, particles_per_release, 
+        interval_of_release, num_of_releases, traj
+        )
 
     # put into for loop here, for each pld
     for pld in plds:
 
+        logging.info("Processing pld {} for shapefile {}".format(pld, base))
         # check that pld is not longer than length of timestep
         pld_int = int((pld * 24) / time_step_output)
         if pld_int > len(timestep):
-            logging.error("PLD provided is greater than length of timestep")
-            break
+            logging.warning("PLD provided is greater than length of timestep")
 
         origin_dest = settlement(
             settlement_apply, origin, shp_og_buff, timestep, status, lon, lat, traj, 
-            crs_input_shp, precomp, precomp_range, particle_range, pld_int
+            crs_input_shp, precomp, precomp_range, particle_range, pld_int,
+            timesteps_with_release
             )
 
-        origin_dest = get_destination_coords(
-            origin_dest, traj, lon, lat, timestep, crs_input_shp, status
-            )
+        if pld == 60:
+            # this doesn't make sense to do for shorter PLDs
+            # it is set up now to write the final location of points
+            # I don't use the destination point shapefiles for much, so I'm not
+            # going to worry about this for now
+            origin_dest = get_destination_coords(
+                origin_dest, traj, lon, lat, timestep, crs_input_shp, status
+                )
 
         origin_dest_mort, mortality_p = calc_mortality(
             mortality_rate, traj, timestep, origin_dest, time_step_output, 
-            mort_period, interval_of_release, num_of_releases
+            mort_period, timesteps_with_release, particle_range
             )
 
         origin_dest_mort = start_time_int(
             origin_dest_mort, timesteps_with_release, particle_range, traj
             )
 
-        ### outputs
+        origin_dest_mort = fill_na(origin_dest_mort)
 
-        shp_out = os.path.join(output_shp_dir, 'dest_biology_pts_' + base + '.shp')
-        out_shp_dest_points(origin_dest_mort, crs_input_shp, shp_out, date_start)
+        ### outputs
+        if pld == 60:
+            shp_out = os.path.join(dest_pts_dir, 'dest_biology_pts_{}_pld{}.shp'.format(base, str(pld)))
+            out_shp_dest_points(origin_dest_mort, crs_input_shp, shp_out, date_start)
 
         if settlement_apply:
-            conn_lines_out = os.path.join(output_shp_dir, 'connectivity_' + base + '_pld' + str(pld) + '.shp')
+            conn_lines_out = os.path.join(conn_lines_dir, 'connectivity_{}_pld{}.shp'.format(base, str(pld)))
             connection_lines(
-                shp_out, shp_og, crs_input_shp, conn_lines_out, date_start, pld_int, pld
+                origin_dest_mort, shp_og, crs_input_shp, conn_lines_out, date_start, pld_int, pld
                 )
 
 patch_centroids_out = os.path.join(output_shp_dir, 'patch_centroids.shp')
