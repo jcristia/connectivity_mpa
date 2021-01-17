@@ -960,7 +960,6 @@ class OpenDriftSimulation(PhysicsMethods):
         dtype.append(('hd', np.float32))
         ############################
 
-        self.logger.debug(dtype)
         env = np.ma.array(np.zeros(len(lon))*np.nan, dtype=dtype)
 
         if not hasattr(self, 'fallback_values'):
@@ -1286,10 +1285,10 @@ class OpenDriftSimulation(PhysicsMethods):
                 env['y_sea_water_velocity'] += np.random.normal(
                     0, std, self.num_elements_active())            
             elif 'hd' in env.dtype.names:
+                self.logger.debug('Adding uncertainty for current: %s m/s (JC VERSION)' % std)
                 D = env['hd']
                 dt = self.time_step.total_seconds()                
                 std = np.sqrt(2*D/dt)
-                self.logger.debug('Adding uncertainty for current: m/s')
                 env['x_sea_water_velocity'] += np.random.normal(
                     0, std, self.num_elements_active())
                 env['y_sea_water_velocity'] += np.random.normal(
