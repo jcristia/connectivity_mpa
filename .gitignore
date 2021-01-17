@@ -4,6 +4,7 @@
 !.gitignore
 !scripts/
 !opendrift-1.4.2/
+!simulations/
 
 # then exclude specific folder and file types
 output
@@ -29,6 +30,8 @@ outputs
 *.pyc
 
 *.nc
+*.npy
+*.log
 
 *.code-workspace
 *settings.json
