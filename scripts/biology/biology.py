@@ -47,7 +47,7 @@ input_npy_dir = r'outputs/npy' # where npy files were output
 #### for local:
 input_shp_dir = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpas_shp' # shpfiles used for opendrift release
 shp_og = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpa_.shp' # full release_polys dataset
-shp_og_buff = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpa_.shp'  # buffered for checking settlement
+shp_og_buff = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpa_buff.shp'  # buffered for checking settlement
 ####
 crs_input_shp = {'init' :'epsg:3005'} # BC Albers
 output_shp_dir = r'outputs/shp' # connection lines
@@ -94,9 +94,10 @@ backwards_run = False
 # mortality is random and I want all PLDs done on one random selection of 
 # particles instead of on different selections.
 # Provide PLDs in a list in units of days
-plds = [1, 2]
+plds = [1, 60]
 
-
+# !!! Reduce the range of shapefiles that get processed?
+# see for loop at bottom
 
 ###################
 # BIOLOGY FUNCTIONS
@@ -212,6 +213,8 @@ def settlement(
                 if i == len(status[0]):
                     # PLD_int is now larger than time steps
                     # e.g. a 60 day pld, but everything settled by day 25
+                    logging.warning(
+                        'PLD exceeds time length. Exiting settlement at step {} for this group of particles'.format(i))
                     break 
 
                 # output_str = "settlement time step " + str(i) + " of " + str(pld_int)
@@ -544,6 +547,9 @@ def connection_lines(origin_dest_mort, shp_og, crs_input_shp, conn_lines_out, da
     connection_lines['date_start'] = date_start   
     connection_lines = geopandas.GeoDataFrame(connection_lines, geometry='line')
     connection_lines.crs = crs_input_shp
+    if len(connection_lines) == 0:
+        logging.warning('Connection lines df is blank. Cannot write to shapefile')
+        return
     connection_lines.to_file(filename=conn_lines_out, driver='ESRI Shapefile')
 
 #### output patch centroids to shapefile (for use in network analysis) ####
@@ -633,7 +639,7 @@ for shp in shapefiles:
         # check that pld is not longer than length of timestep
         pld_int = int((pld * 24) / time_step_output)
         if pld_int > len(timestep):
-            logging.warning("PLD provided is greater than length of timestep")
+            logging.warning("PLD provided is greater than length of time")
 
         origin_dest = settlement(
             settlement_apply, origin, shp_og_buff, timestep, status, lon, lat, traj, 
