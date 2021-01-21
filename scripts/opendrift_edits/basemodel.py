@@ -1,5 +1,11 @@
-# JC edits where ogr gets imported. It was giving me an error. You have to import from osgeo.
-# ALSO, significant edits to how diffusion is incorporated for different models
+# JC edits (search for 'JC'. I think I labeled all my edits):
+# 1 
+# where ogr gets imported in seed_from_shapefile. It was giving me an error. You have to import from osgeo.
+# 2 significant edits to how diffusion is incorporated for different models
+# These are in get_environment and where current_uncertainty is added
+# 3
+# in seed from polygon I had to add a while loop so that if any elements are missing
+# they still get added in properly
 
 # This file is part of OpenDrift.
 #
@@ -1285,7 +1291,7 @@ class OpenDriftSimulation(PhysicsMethods):
                 env['y_sea_water_velocity'] += np.random.normal(
                     0, std, self.num_elements_active())            
             elif 'hd' in env.dtype.names:
-                self.logger.debug('Adding uncertainty for current: %s m/s (JC VERSION)' % std)
+                self.logger.debug('Adding uncertainty for current (JC VERSION)')
                 D = env['hd']
                 dt = self.time_step.total_seconds()                
                 std = np.sqrt(2*D/dt)
@@ -1811,9 +1817,14 @@ class OpenDriftSimulation(PhysicsMethods):
         if len(lonpoints) < number:
             # If number of positions is smaller than requested,
             # we duplicate the first ones
-            missing = number - len(lonpoints)
-            lonpoints = np.append(lonpoints, lonpoints[0:missing])
-            latpoints = np.append(latpoints, latpoints[0:missing])
+            #### !!!! JC EDITS !!!!
+            # If the number missing is greater than the number existing, then
+            # this still results in too few particles, so I need to put the
+            # below 3 lines in a While loop
+            while len(lonpoints) < number:
+                missing = number - len(lonpoints)
+                lonpoints = np.append(lonpoints, lonpoints[0:missing])
+                latpoints = np.append(latpoints, latpoints[0:missing])
 
         # Finally seed at calculated positions
         self.seed_elements(lonpoints, latpoints, number=number,
