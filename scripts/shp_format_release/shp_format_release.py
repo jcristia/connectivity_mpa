@@ -34,6 +34,7 @@ with arcpy.da.SearchCursor(fc, ['Shape_Area']) as cursor:
 
 # min: 9
 # max: 1,224,332,320 (Olympic Coast)
+# 2nd largest: 355,986,778
 # mean: 15,814,497
 # median: 722,623
 # the largest Canadian MPA is Gwaii Haanas (well, one part of it): 310,867,762
@@ -57,48 +58,34 @@ I explored some simple clean equations, but none of them worked that well
 define a few points. I the end this will be the easiest to justify.
 
 I set the amounts I want to release for the min, max, and median patch size. 
-For min, I wanted to release at least 10 points per release. This would be 840
-total, which means my min connection strength would be 0.0012. For max, I 
-examined the few largest patches. They are massive. I set this at 3,000 (I can 
-then detect probabilities as low as 0.0000039). This would be for Olympic 
+For min, I wanted to release at least 1 particle per release. This would be 84
+total, which means my min connection strength would be 0.012. For max, I 
+examined the few largest patches. They are massive. I set this at 1,000 (I can 
+then detect probabilities as low as 0.001). This would be for Olympic 
 Coast, which is an order of magnitude larger than the others. I'm simply not 
-as concerned with this one anyways. The biggest Canadian mpa is Gwaii Haanas, 
-which would have 2300 particles. For the median, which is many order of 
-magnitude less than the max, I set this at 750 particles per release. Based 
+as concerned with this one anyways. For the median, which is many order of 
+magnitude less than the max, I set this at 50 particles per release. Based 
 on a visual assessment of these patches, I think this is adequate.
 
 I put these 3 data points into mycurvefit.com (quick and dirty), and fit a power
  curve. This allows for quick growth at the beginning and then growth slows.
-Equation is y = 55.67552x^0.1905742
 
-Compared to my seagrass chapter, it is proportionately more particles released. 
-I'll be releasing a total of 27 million particles (over the 84 releases), 
-whereas if I used the seagrass proportion I would only release 20 million.
-And, since I did some sensitivity tests for chapter 1, I can say that I will at 
-least know that it takes those into account indirectly.
+When compared to Masson 2015, I am releasing than them per 
+unit area (except for the largest patch). They also didn't offer any 
+justification for their particle count. I can say something like "it exceeds the
+particles released from past studies on the BC coast (e.g. ...; ...)"
+Masson: 0.0000022 particles per meter squared
+Mine:
+smallest   0.11/1 m2
+median 0.000069/1 m2 (if I release 50)
+largest 0.00000082/1 m2
 
-When compared to Masson 2015, I am releasing way more particles than them per 
-unit area. They also didn't offer any justification for their particle count.
-I can say something like "it exceeds the particles released from past studies on
- the BC coast (e.g. ...; ...)"
-
-However, I should also eventually do sensitivity tests on the smallest, median, 
+However, I will eventually do sensitivity tests on the smallest, median, 
 and largest patches (or patches near these sizes that are spaced evenly 
-throughout). Start with the particle counts I am using and go up from there. 
-Even though I am now interested in all places that particles end up, the primary
- goal is still connections between MPAs. However, I guess since they are more 
- spaced out then this may not tell me much for a sensitivity analysis.
-
-I looked into how other people have done this and it is never explained well. 
-See Snauffer et al 2014 and Simons et al 2013.
-I think my justifications are fine. It's clear that I am releasing a lot of 
-particles.
-
-I can also just skate over this in the manuscript and deal with it if a reviewer
- says something.
+throughout). See my notes in Evernote about particle count sensitivity tests.
 
 equation from mycurvefit.com (yes, quick and dirty)
-y = 55.67552 * x^0.1905742
+y = 0.2180685x^0.4028882
 """
 
 ############################################
@@ -106,22 +93,47 @@ y = 55.67552 * x^0.1905742
 # calculate particles based on area
 with arcpy.da.UpdateCursor(fc, ['Shape_Area', 'part_num']) as cursor:
     for row in cursor:
-        particles = 55.67552 * (row[0] ** 0.1905742)
+        particles = 0.2180685 * (row[0] ** 0.4028882)
         row[1] = particles
         cursor.updateRow(row)
 
 ############################################
 
 # split out mpas into individual shapefiles
+# (NO LONGER DOING THIS, but I will keep this code for now)
 
-# export to shapefile
-shp = os.path.join(mpas_shp_folder, 'mpa_.shp')
-arcpy.CopyFeatures_management(fc, shp)
+# # export to shapefile
+# shp = os.path.join(mpas_shp_folder, 'mpa_.shp')
+# arcpy.CopyFeatures_management(fc, shp)
 
-# create folder if it doesn't exists
-mpas_shp = os.path.join(mpas_shp_folder, 'mpas_shp')
-if not os.path.exists(mpas_shp):
-    os.makedirs(mpas_shp)
+# # create folder if it doesn't exists
+# mpas_shp = os.path.join(mpas_shp_folder, 'mpas_shp')
+# if not os.path.exists(mpas_shp):
+#     os.makedirs(mpas_shp)
 
-# split
-arcpy.SplitByAttributes_analysis(shp, mpas_shp, 'uID_202011')
+# # split
+# arcpy.SplitByAttributes_analysis(shp, mpas_shp, 'uID_202011')
+
+
+#############################################
+
+# grouping
+# for Opendrift, I tired simulating 1 feature at a time, thinking that this
+# would be faster, but it was actually quite slow. It is better to simulate many
+# patches at once. Therefore, I will manually separate them into nearby groups
+# (assuming they will run faster if not as much of the reader is called),
+# but keep it as one shapefile.
+
+# In my seagrass chapter I did 4,000 total particles per release. Stick with
+# that. Add up polygons and get about 4,000 particles.
+
+# add attribute
+arcpy.AddField_management(fc, 'grouping', 'SHORT')
+
+# NOW:
+# do groupings visually
+# do it on a copied version:
+
+#arcpy.CopyFeatures_management(fc, 'M08_mpa_20210120_groupings')
+
+# then manually export to shape (name: mpa_.shp)
