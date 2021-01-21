@@ -1817,9 +1817,14 @@ class OpenDriftSimulation(PhysicsMethods):
         if len(lonpoints) < number:
             # If number of positions is smaller than requested,
             # we duplicate the first ones
-            missing = number - len(lonpoints)
-            lonpoints = np.append(lonpoints, lonpoints[0:missing])
-            latpoints = np.append(latpoints, latpoints[0:missing])
+            #### !!!! JC EDITS !!!!
+            # If the number missing is greater than the number existing, then
+            # this still results in too few particles, so I need to put the
+            # below 3 lines in a While loop
+            while len(lonpoints) < number:
+                missing = number - len(lonpoints)
+                lonpoints = np.append(lonpoints, lonpoints[0:missing])
+                latpoints = np.append(latpoints, latpoints[0:missing])
 
         # Finally seed at calculated positions
         self.seed_elements(lonpoints, latpoints, number=number,
