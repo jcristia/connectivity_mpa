@@ -40,12 +40,10 @@ logging.basicConfig(level=logging.INFO)
 input_nc_dir = r'outputs/nc' # where nc files were output
 input_npy_dir = r'outputs/npy' # where npy files were output
 #### for cluster:
-#input_shp_dir = r'shp_inputs/release_polys' # shpfiles used for opendrift release
 #shp_og = r'shp_inputs/shp_og/mpas_.shp' # full release_polys dataset
 #shp_og_buff = r'shp_inputs/shp_og_buff/mpas_.shp'  # buffered for checking settlement. 
 # This is to account for possible slivers between coastline
 #### for local:
-input_shp_dir = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpas_shp' # shpfiles used for opendrift release
 shp_og = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpa_.shp' # full release_polys dataset
 shp_og_buff = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpa_buff.shp'  # buffered for checking settlement
 ####
@@ -63,7 +61,7 @@ precomp = 0
 time_step_output = 0.5 # in hours. It will be in seconds in the opendrift script
 interval_of_release = 4 # in hours, interval can't be less than time step output
 # if no delayed release then just put same value as time_step_output
-num_of_releases = 3 # if no delayed release then just put 1
+num_of_releases = 1 # if no delayed release then just put 1
 
 # allow particles to settle on a poly?
 settlement_apply = True
@@ -122,16 +120,19 @@ def get_particle_originPoly(
         lats = lats[::-1]
     
     # get origin_marker (uID)
-    om = origin_marker[0][0]
-    if np.ma.is_masked(om):
-        om = origin_marker[0][origin_marker[0].mask == False][0]
+    om = []
+    for i in origin_marker:
+        o = i[0]
+        if np.ma.is_masked(o):
+            o = i[i.mask == False][0]
+        om.append(o)
 
     # add origin coords , trajid and uID to df
     df = pd.DataFrame()
     df['o_coords'] = list(zip(lons, lats))
     df['o_coords'] = df['o_coords'].apply(Point)
     df['traj_id'] = list(traj)
-    df['uID_part'] = om
+    df['uID_part'] = list(om)
     points = geopandas.GeoDataFrame(df, geometry='o_coords')
     points.crs = {'init' :'epsg:4326'}
     points = points.to_crs(crs_input_shp)
@@ -583,40 +584,35 @@ conn_lines_dir = os.path.join(output_shp_dir, 'conn_lines')
 if not os.path.exists(conn_lines_dir):
     os.makedirs(conn_lines_dir)
 
-# get release shapefiles
-sg_files = os.listdir(input_shp_dir)
-shapefiles = []
-for file in sg_files:
-    if file.endswith('.shp'):
-        shapefiles.append(os.path.join(input_shp_dir, file))
+# get nc files
+nc_files = os.listdir(input_nc_dir)
+ncs = []
+for file in nc_files:
+    ncs.append(os.path.join(input_nc_dir, file))
 
-# reduce that range if necessary
-shapefiles = shapefiles[:3]
+# reduce that range if if I don't want to run them all
+ncs = ncs[:]
 
 # run biology functions for each release shapefile
-for shp in shapefiles:
+for ncf in ncs:
 
     # get base name
-    base = os.path.splitext(os.path.basename(shp))[0]
-    logging.info("Processing shapefile {}".format(base))
-
-    # output from Opendrift
-    nc_output = os.path.join(input_nc_dir, 'output_' + base + '.nc')
+    base = os.path.splitext(os.path.basename(ncf))[0]
+    base = base.split('_')[1]
+    logging.info("Processing group {}".format(base))
 
     # the lat/lon numpy files of starting coords saved from the opendrift run
     lat_np = os.path.join(input_npy_dir, 'lat_' + base + '.npy')
     lon_np = os.path.join(input_npy_dir, 'lon_' + base + '.npy')
 
-    release_polys = shp
-
-    dataset = nc.Dataset(nc_output, "r+")
+    dataset = nc.Dataset(ncf, "r+")
     lon = dataset.variables["lon"]
     lat = dataset.variables["lat"]
     traj = dataset.variables["trajectory"]
     status = dataset.variables["status"]
     timestep = dataset.variables["time"]
     origin_marker = dataset.variables['origin_marker']
-    age_seconds = dataset.variables['age_seconds']
+    #age_seconds = dataset.variables['age_seconds']
     # this will give the actual 30 SECOND interval that it was deactivated
     date_start = dataset.time_coverage_start
 
