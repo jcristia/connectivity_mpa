@@ -55,10 +55,13 @@ file_nep = os.path.join(base, base_nep, nc_nep)
 file_ssc = os.path.join(base, base_ssc, nc_ssc)
 file_lnd = os.path.join(base_lnd, shp_lnd)
 reader_nep = reader_netCDF_CF_unstructured.Reader(
-    file_nep, latstep=0.01, lonstep=0.01, buffer=0.08, name='NEP')
+    file_nep, latstep=0.01, lonstep=0.01, buffer=0.1, name='NEP')
 reader_ssc = reader_netCDF_CF_unstructured.Reader(
-    file_ssc, latstep=0.004, lonstep=0.004, buffer=0.08, name='SSC')
+    file_ssc, latstep=0.004, lonstep=0.004, buffer=0.1, name='SSC')
 reader_lnd = reader_shape.Reader.from_shpfiles(file_lnd)
+# buffers are set low and have been tested to not get data block errors
+# for boundaries and around certain MPAs you will still get warnings about
+# extrapolation. This is ok. See main note in Evernote for details.
 
 o.add_reader([reader_lnd, reader_ssc, reader_nep])
 
@@ -78,14 +81,14 @@ for feature in lyr:
         featurenum = feature.GetFID() + 1 # opendrift subtracts 1 for some reason
         uID = feature.GetField('uID_202011')
         particles = feature.GetField('part_num')
-        part_fact = 1 # for testing
+        part_fact = 1 # factor to reduce particle count for testing
         particles = int(particles * part_fact)
 
         time_step = timedelta(hours=4)
         num_steps = 84
         for i in range(num_steps):
             o.seed_from_shapefile(
-                mpa_shp, # this didn't work is I did shp here instead of mpa_shp
+                mpa_shp, # this didn't work if I did shp here instead of mpa_shp
                 featurenum = featurenum,
                 origin_marker=uID,
                 number=particles, 
@@ -98,7 +101,9 @@ npy_lat = os.path.join(np_out, 'lat_{}.npy'.format(shp_group))
 np.save(npy_lon, o.elements_scheduled.lon)
 np.save(npy_lat, o.elements_scheduled.lat)
 
+
 ######### Configure and Run
+
 #o.list_configspec()
 o.set_config('general:use_auto_landmask', False)  # use custom landmask
 o.set_config('drift:current_uncertainty', 0) # using basemodel hardcoded values
@@ -127,3 +132,4 @@ print(o)
 #o.animation()
 
 #####################
+
