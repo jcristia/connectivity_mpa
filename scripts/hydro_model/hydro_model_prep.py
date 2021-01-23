@@ -125,24 +125,30 @@ ds = xr.Dataset(
 ).to_netcdf(forcing_path)
 
 
-# # manual check (Arc can't read it directly when lat/lon aren't dimensions)
+# manual check (Arc can't read it directly when lat/lon aren't dimensions)
 # import numpy as np
 # import xarray as xr
 # filename = r"C:\Users\jcristia\Documents\GIS\MSc_Projects\Hakai\spatial\models\nep_nemo\processed\NEP36_1h_20110101_20110316.nc"
 # chf = xr.open_dataset(filename)
 # lat = chf.latitude[:].values
 # lon = chf.longitude[:].values
-# headers = ['X', 'Y']
+# uo = chf.u[0].values
+# vo = chf.v[0].values
+# headers = ['X', 'Y', 'u', 'v']
 # output = open(r'C:\Users\jcristia\Desktop\grid_nepnemo_JC.csv', 'w')
 # for header in headers:
 #     output.write(header + ",")
 # output.write("\n")
-# for x,y in zip(lon,lat):
+# for x,y,u,v in zip(lon,lat,uo,vo):
 #     if x != 0 and y != 0:
 #         # can only write strings
 #         output.write('%s' % x)
 #         output.write(',')
 #         output.write('%s' % y)
+#         output.write(',')
+#         output.write('%s' % u)
+#         output.write(',')
+#         output.write('%s' % v)
 #         output.write(',')
 #         output.write("\n")
 # output.close()
