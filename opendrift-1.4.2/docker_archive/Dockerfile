@@ -27,11 +27,11 @@ RUN mkdir /code
 ADD . /code
 WORKDIR /code
 RUN /opt/conda/bin/conda env create -f environment.yml
-RUN /bin/bash -c '''. activate opendrift && \
+RUN /bin/bash -c '''. activate opendrift_mpaconn && \
     pip install -e . && \
-    echo "source activate opendrift" > ~/.bashrc'''
+    echo "source activate opendrift_mpaconn" > ~/.bashrc'''
 
 WORKDIR /code
 
 # Test
-# RUN /bin/bash -c ". activate opendrift && cd /code && ./testall"
+# RUN /bin/bash -c ". activate opendrift_mpaconn && cd /code && ./testall"
