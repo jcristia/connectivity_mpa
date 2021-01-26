@@ -1,0 +1,3 @@
+I want to mimize the amount of changes I need to make to output filenames. Therefore, within scripts, I will have a folder for each time period. Then within those folders there can be an outputs folder. Doing it this prevents me from having to attach the time period to every output name as well. It also prevents me from having to make every script name unique.
+
+I can keep shell scripts in the root of the staging folder.
