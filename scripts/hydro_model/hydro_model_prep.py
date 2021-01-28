@@ -14,7 +14,7 @@ from dateutil.parser import parse
 # Select files by date
 #######
 
-year = '2011'
+year = '2014'
 # from and to (enter month and days as 2 digits)
 fr = '0101'
 to = '0316'
