@@ -9,6 +9,10 @@
 # then exclude specific folder and file types
 output
 outputs
+scripts/script_generator/jobs
+scripts/script_generator/scripts
+simulations/mpa_20210125_STAGING/*.sh
+simulations/mpa_20210125_STAGING/scripts
 
 *.csv
 *.xlsx
