@@ -32,10 +32,20 @@ logging.basicConfig(level=logging.INFO)
 
 ###################
 # paths and variables
-# folder structure and filenames are important
-# If there are any significant changes then check how filenames are
-# concatenated at the bottom
 ###################
+
+# # unix version of paths:
+# root = os.getcwd()
+# base = os.path.dirname(__file__)
+# ####
+# input_nc_dir = os.path.join(root, base, 'outputs/nc') # where nc files were output
+# input_npy_dir = os.path.join(root, base, 'outputs/npy') # where npy files were output
+# ####
+# shp_og = os.path.join(root, 'inputs/mpas/mpa_.shp') # full release_polys dataset
+# shp_og_buff = os.path.join(root, 'inputs/mpas/mpa_buff.shp')  # buffered for checking settlement
+# ####
+# crs_input_shp = {'init' :'epsg:3005'} # BC Albers
+# output_shp_dir = os.path.join(root, base, 'outputs/shp') # connection lines
 
 input_nc_dir = r'outputs/nc' # where nc files were output
 input_npy_dir = r'outputs/npy' # where npy files were output
@@ -92,9 +102,9 @@ backwards_run = False
 # mortality is random and I want all PLDs done on one random selection of 
 # particles instead of on different selections.
 # Provide PLDs in a list in units of days
-plds = [1, 60]
+plds = [1, 3, 7, 10, 21, 30, 40, 60]
 
-# !!! Reduce the range of shapefiles that get processed?
+# !!! Reduce the range of nc files that get processed?
 # see for loop at bottom
 
 ###################
