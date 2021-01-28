@@ -81,11 +81,11 @@ for feature in lyr:
         featurenum = feature.GetFID() + 1 # opendrift subtracts 1 for some reason
         uID = feature.GetField('uID_202011')
         particles = feature.GetField('part_num')
-        part_fact = 1 # factor to reduce particle count for testing
+        part_fact = 0.1 # factor to reduce particle count for testing
         particles = int(particles * part_fact)
 
         time_step = timedelta(hours=4)
-        num_steps = 84
+        num_steps = 1
         for i in range(num_steps):
             o.seed_from_shapefile(
                 mpa_shp, # this didn't work if I did shp here instead of mpa_shp
@@ -113,8 +113,8 @@ o.set_config('drift:scheme', 'runge-kutta')
 output_nc = os.path.join(nc_out, 'output_{}.nc'.format(shp_group))
 print("Simulation for group {}".format(shp_group))
 o.run(
-    #steps=720,
-    end_time=reader_ssc.end_time, 
+    steps=720,
+    #end_time=reader_ssc.end_time, 
     time_step=120, 
     time_step_output=1800, 
     outfile= output_nc, 
