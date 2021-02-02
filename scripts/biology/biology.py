@@ -314,6 +314,11 @@ def settlement(
 # particles at the end of a PLD. However, this would require dealing with the
 # delayed release issue. Since I don't use the dest_pts shapefiles for much, I
 # am just going to let this go for now.
+
+# If I do decide to revisit this, this is where age_seconds would be useful.
+# Instead of dealing with timestep of release, I just look for where each particle
+# is x seconds old. If it is masked at that value, then just look for where it
+# is 1 (stranded).
 ###################
 
 def get_destination_coords(origin_dest, traj, lon, lat, timestep, crs_input_shp, status):
@@ -641,7 +646,7 @@ for ncf in ncs:
     # put into for loop here, for each pld
     for pld in plds:
 
-        logging.info("Processing pld {} for shapefile {}".format(pld, base))
+        logging.info("Processing pld {} for nc file {}".format(pld, base))
         # check that pld is not longer than length of timestep
         pld_int = int((pld * 24) / time_step_output)
         if pld_int > len(timestep):
