@@ -26,8 +26,8 @@ for date in dates:
             rsh.write(f'''\
 #!/bin/bash
 
-#SBATCH --time=4-00:00        # time (DD-HH:MM)
-#SBATCH --mem-per-cpu=16000M   # memory; default unit is megabytes
+#SBATCH --time=1-12:00        # time (DD-HH:MM)
+#SBATCH --mem-per-cpu=128G  # memory; default unit is megabytes
 
 #SBATCH --mail-user=jcristia10@gmail.com
 #SBATCH --mail-type=BEGIN
@@ -35,7 +35,7 @@ for date in dates:
 #SBATCH --mail-type=FAIL
 
 #SBATCH --job-name={base_od + date + '_' + group}
-#SBATCH --output=./outputlogs/%x.out
+#SBATCH --output=./outputlogs/%x_%j.out
 
 module load singularity
 singularity exec --home /home/jcristia/scratch/mpaconn opendrift_mpaconn.sif  python scripts/sim{date}/{base_od + group}.py
@@ -48,8 +48,8 @@ for date in dates:
         rsh.write(f'''\
 #!/bin/bash
 
-#SBATCH --time=4-00:00        # time (DD-HH:MM)
-#SBATCH --mem-per-cpu=16000M   # memory; default unit is megabytes
+#SBATCH --time=1-00:00        # time (DD-HH:MM)
+#SBATCH --mem-per-cpu=32000M   # memory; default unit is megabytes
 
 #SBATCH --mail-user=jcristia10@gmail.com
 #SBATCH --mail-type=BEGIN
@@ -57,8 +57,8 @@ for date in dates:
 #SBATCH --mail-type=FAIL
 
 #SBATCH --job-name={base_bi + date}
-#SBATCH --output=./outputlogs/%x.out
+#SBATCH --output=./outputlogs/%x_%j.out
 
 module load singularity
-singularity exec --home /home/jcristia/scratch/mpaconn biology_mpaconn.sif  python scripts/sim{date}/{base_bi}.py
+singularity exec --home /home/jcristia/scratch/mpaconn biology_mpaconn.sif  python scripts/sim{date}/{base_bi}.py | tee bi_out_{date}.txt
 ''')
