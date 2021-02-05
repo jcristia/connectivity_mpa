@@ -1,3 +1,8 @@
+
+# if running on cedar, then py_scripts_create.py adds a variable above this line
+# for which group nc file to use
+
+
 # Script to add bio part of a biophysical model
 # This script takes the output netcdf file from an Opendrift simulation and 
 # modifies particle end trajectories by consdering precompetency period, 
@@ -25,6 +30,7 @@ import pandas as pd
 import geopandas
 import logging
 import math
+import sys
 import os
 logging.basicConfig(level=logging.INFO)
 
@@ -34,31 +40,31 @@ logging.basicConfig(level=logging.INFO)
 # paths and variables
 ###################
 
-# # unix version of paths:
-# root = os.getcwd()
-# base = os.path.dirname(__file__)
-# ####
-# input_nc_dir = os.path.join(root, base, 'outputs/nc') # where nc files were output
-# input_npy_dir = os.path.join(root, base, 'outputs/npy') # where npy files were output
-# ####
-# shp_og = os.path.join(root, 'inputs/mpas/mpa_.shp') # full release_polys dataset
-# shp_og_buff = os.path.join(root, 'inputs/mpas/mpa_buff.shp')  # buffered for checking settlement
-# ####
-# crs_input_shp = {'init' :'epsg:3005'} # BC Albers
-# output_shp_dir = os.path.join(root, base, 'outputs/shp') # connection lines
-
-input_nc_dir = r'outputs/nc' # where nc files were output
-input_npy_dir = r'outputs/npy' # where npy files were output
-#### for cluster:
-#shp_og = r'shp_inputs/shp_og/mpas_.shp' # full release_polys dataset
-#shp_og_buff = r'shp_inputs/shp_og_buff/mpas_.shp'  # buffered for checking settlement. 
-# This is to account for possible slivers between coastline
-#### for local:
-shp_og = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpa_.shp' # full release_polys dataset
-shp_og_buff = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpa_buff.shp'  # buffered for checking settlement
+# unix version of paths:
+cluster_run = True
+root = os.getcwd()
+base = os.path.dirname(__file__)
+####
+input_nc_dir = os.path.join(root, base, 'outputs/nc') # where nc files were output
+input_npy_dir = os.path.join(root, base, 'outputs/npy') # where npy files were output
+####
+shp_og = os.path.join(root, 'inputs/mpas/mpa_.shp') # full release_polys dataset
+shp_og_buff = os.path.join(root, 'inputs/mpas/mpa_buff.shp')  # buffered for checking settlement
 ####
 crs_input_shp = {'init' :'epsg:3005'} # BC Albers
-output_shp_dir = r'outputs/shp' # connection lines
+output_shp_dir = os.path.join(root, base, 'outputs/shp') # connection lines
+
+# Local version of paths:
+# cluster_run = False
+# ####
+# input_nc_dir = r'outputs/nc' # where nc files were output
+# input_npy_dir = r'outputs/npy' # where npy files were output
+# ####
+# shp_og = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpa_.shp' # full release_polys dataset
+# shp_og_buff = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpa_buff.shp'  # buffered for checking settlement
+# ####
+# crs_input_shp = {'init' :'epsg:3005'} # BC Albers
+# output_shp_dir = r'outputs/shp' # connection lines
 
 precomp = 0
 # if I am using 'stranding' in opendrift, then I likely need at least a small 
@@ -71,7 +77,7 @@ precomp = 0
 time_step_output = 0.5 # in hours. It will be in seconds in the opendrift script
 interval_of_release = 4 # in hours, interval can't be less than time step output
 # if no delayed release then just put same value as time_step_output
-num_of_releases = 1 # if no delayed release then just put 1
+num_of_releases = 84 # if no delayed release then just put 1
 
 # allow particles to settle on a poly?
 settlement_apply = True
@@ -103,6 +109,10 @@ backwards_run = False
 # particles instead of on different selections.
 # Provide PLDs in a list in units of days
 plds = [1, 3, 7, 10, 21, 30, 40, 60]
+pld_index = None
+if cluster_run:
+    pld_index = int(sys.argv[1])
+    plds = plds[pld_index:pld_index+1]
 
 # !!! Reduce the range of nc files that get processed?
 # see for loop at bottom
@@ -589,15 +599,18 @@ def out_shp_patch_centroids(shp_og, patch_centroids_out, crs_input_shp, date_sta
 # run all functions, even if you aren't applying settlement and/or mortality
 ###################
 
-# create output shp folder
-if not os.path.exists(output_shp_dir):
-    os.makedirs(output_shp_dir)
+# commented out for running on Cedar. I just manually created the folders.
+# when I run jobs at the same time, sometimes the conflict when checking and
+# creating directories
+# # create output shp folder
+# if not os.path.exists(output_shp_dir):
+#     os.makedirs(output_shp_dir)
 dest_pts_dir = os.path.join(output_shp_dir, 'dest_pts')
-if not os.path.exists(dest_pts_dir):
-    os.makedirs(dest_pts_dir)
+# if not os.path.exists(dest_pts_dir):
+#     os.makedirs(dest_pts_dir)
 conn_lines_dir = os.path.join(output_shp_dir, 'conn_lines')
-if not os.path.exists(conn_lines_dir):
-    os.makedirs(conn_lines_dir)
+# if not os.path.exists(conn_lines_dir):
+#     os.makedirs(conn_lines_dir)
 
 # get nc files
 nc_files = os.listdir(input_nc_dir)
@@ -606,7 +619,11 @@ for file in nc_files:
     ncs.append(os.path.join(input_nc_dir, file))
 
 # reduce that range if if I don't want to run them all
-ncs = ncs[:]
+if cluster_run:  # nc_index gets added for cluster runs
+    ncs = ncs[nc_index:nc_index+1]
+else:
+    nc_index = None
+    ncs = ncs[:]
 
 # run biology functions for each release shapefile
 for ncf in ncs:
@@ -620,7 +637,7 @@ for ncf in ncs:
     lat_np = os.path.join(input_npy_dir, 'lat_' + base + '.npy')
     lon_np = os.path.join(input_npy_dir, 'lon_' + base + '.npy')
 
-    dataset = nc.Dataset(ncf, "r+")
+    dataset = nc.Dataset(ncf, "r") # no '+'
     lon = dataset.variables["lon"]
     lat = dataset.variables["lat"]
     traj = dataset.variables["trajectory"]
@@ -689,7 +706,9 @@ for ncf in ncs:
                 origin_dest_mort, shp_og, crs_input_shp, conn_lines_out, date_start, pld_int, pld
                 )
 
-patch_centroids_out = os.path.join(output_shp_dir, 'patch_centroids.shp')
-out_shp_patch_centroids(
-    shp_og, patch_centroids_out, crs_input_shp, date_start
-    )
+# just create this once
+if (nc_index == 0 or nc_index == None) and (pld_index == 0 or pld_index == None):
+    patch_centroids_out = os.path.join(output_shp_dir, 'patch_centroids.shp')
+    out_shp_patch_centroids(
+        shp_og, patch_centroids_out, crs_input_shp, date_start
+        )
