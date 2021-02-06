@@ -43,22 +43,24 @@ singularity exec --home /home/jcristia/scratch/mpaconn opendrift_mpaconn.sif  py
 
 
 for date in dates:
-    name = bi + date + '.sh'
-    with open(name, 'w', newline='\n') as rsh:
-        rsh.write(f'''\
+    for group in groups:
+        name = bi + date + '_' + group + '.sh'
+        with open(name, 'w', newline='\n') as rsh:
+            rsh.write(f'''\
 #!/bin/bash
 
 #SBATCH --time=1-00:00        # time (DD-HH:MM)
-#SBATCH --mem-per-cpu=32000M   # memory; default unit is megabytes
+#SBATCH --mem-per-cpu=4000M   # memory; default unit is megabytes
+#SBATCH --array=0-7
 
 #SBATCH --mail-user=jcristia10@gmail.com
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
 
-#SBATCH --job-name={base_bi + date}
+#SBATCH --job-name={base_bi + date + '_' + group}
 #SBATCH --output=./outputlogs/%x_%j.out
 
 module load singularity
-singularity exec --home /home/jcristia/scratch/mpaconn biology_mpaconn.sif  python scripts/sim{date}/{base_bi}.py | tee bi_out_{date}.txt
+singularity exec --home /home/jcristia/scratch/mpaconn biology_mpaconn.sif  python scripts/sim{date}/{base_bi + group}.py $SLURM_ARRAY_TASK_ID
 ''')
