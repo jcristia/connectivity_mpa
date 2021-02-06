@@ -1,12 +1,3 @@
-# Opendrift particle tracking
-# environment: opendrift_mpaconn
-
-
-# reader dates
-dates = '20110101_20110316'
-# shapefile group
-shp_group = 1
-
 
 
 
@@ -21,8 +12,12 @@ import os
 
 ######## Set up directory structure
 
-root = os.path.dirname(__file__)
-outputs = os.path.join(root, 'outputs')
+# when running on Cedar in a singularity image the cwd gets changed back to
+# /home/jcristia (or whatever I set the singularity exec --home tag to)
+# I'm just going to build file paths from root
+root = os.getcwd()
+base = os.path.dirname(__file__) # on Cedar, this will give me the path relative to where I execute the job from or where I set the singularity exec --home tag to
+outputs = os.path.join(root, base, 'outputs')
 nc_out = os.path.join(outputs, 'nc')
 np_out = os.path.join(outputs, 'npy')
 logs = os.path.join(outputs, 'logs')
@@ -45,15 +40,13 @@ o = OceanDrift(
 nc_nep = 'NEP36_1h_{}.nc'.format(dates)
 nc_ssc = 'SalishSea_1h_{}_opendrift.nc'.format(dates)
 
-base = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\Hakai\spatial\models'
-base_nep = r'nep_nemo\processed'
-base_ssc = r'salishsea\salishseacast\forcing'
-base_lnd = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\Coastline'
+base_mod = 'inputs/hydro_models'
+base_lnd = 'inputs/coastline'
 shp_lnd = 'landmask_FINAL_wgs84.shp'
 
-file_nep = os.path.join(base, base_nep, nc_nep)
-file_ssc = os.path.join(base, base_ssc, nc_ssc)
-file_lnd = os.path.join(base_lnd, shp_lnd)
+file_nep = os.path.join(root, base_mod, nc_nep)
+file_ssc = os.path.join(root, base_mod, nc_ssc)
+file_lnd = os.path.join(root, base_lnd, shp_lnd)
 reader_nep = reader_netCDF_CF_unstructured.Reader(
     file_nep, latstep=0.01, lonstep=0.01, buffer=0.1, name='NEP')
 reader_ssc = reader_netCDF_CF_unstructured.Reader(
@@ -72,9 +65,9 @@ o.add_reader([reader_lnd, reader_ssc, reader_nep])
 # when they are seeded, not in order by feature
 
 time_step = timedelta(hours=4)
-num_steps = 2
+num_steps = 84
 for i in range(num_steps):
-    mpa_shp = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpa_.shp'
+    mpa_shp = os.path.join(root, 'inputs/mpas/mpa_.shp')
     shp = ogr.Open(mpa_shp)
     lyr = shp.GetLayer(0)
     for feature in lyr:
@@ -84,7 +77,7 @@ for i in range(num_steps):
             featurenum = feature.GetFID() + 1 # opendrift subtracts 1 for some reason
             uID = feature.GetField('uID_202011')
             particles = feature.GetField('part_num')
-            part_fact = 0.1 # factor to reduce particle count for testing
+            part_fact = 1 # factor to reduce particle count for testing
             particles = int(particles * part_fact)
 
             o.seed_from_shapefile(
@@ -113,8 +106,8 @@ o.set_config('drift:scheme', 'runge-kutta')
 output_nc = os.path.join(nc_out, 'output_{}.nc'.format(shp_group))
 print("Simulation for group {}".format(shp_group))
 o.run(
-    steps=720,
-    #end_time=reader_ssc.end_time, 
+    #steps=720,
+    end_time=reader_nep.end_time, 
     time_step=120, 
     time_step_output=1800, 
     outfile= output_nc, 
@@ -132,4 +125,3 @@ print(o)
 #o.animation()
 
 #####################
-
