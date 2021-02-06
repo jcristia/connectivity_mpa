@@ -22,7 +22,7 @@ times = [
 
 
 # Opendrift scripts
-with open('templates/od_1.py', 'r') as file:
+with open('templates/mpa_20210205_cluster.py', 'r') as file:
     od_script = file.read()
 for folder, time in zip(folders, times):
     dir = os.path.join(scripts_dir, folder)
@@ -37,10 +37,14 @@ for folder, time in zip(folders, times):
 
 
 # Biology scripts
-bi_script = 'templates/bio_1.py'
+with open('templates/biology.py', 'r') as file:
+    bi_script = file.read()
 for folder in folders:
     dir = os.path.join(scripts_dir, folder)
     if not os.path.exists(dir):
         os.makedirs(dir)
-    copyfile(bi_script, os.path.join(dir, 'bi.py'))
-    
+    for group in groups:
+        name = os.path.join(dir, f'bi{str(group)}.py')
+        with open(name, 'w') as pys:
+            pys.write(f'nc_group = {group}\n')
+            pys.write(bi_script)    
