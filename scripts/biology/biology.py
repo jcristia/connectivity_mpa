@@ -54,7 +54,7 @@ shp_og_buff = os.path.join(root, 'inputs/mpas/mpa_buff.shp')  # buffered for che
 crs_input_shp = {'init' :'epsg:3005'} # BC Albers
 output_shp_dir = os.path.join(root, base, 'outputs/shp') # connection lines
 
-# Local version of paths:
+# # Local version of paths:
 # cluster_run = False
 # ####
 # input_nc_dir = r'outputs/nc' # where nc files were output
@@ -229,76 +229,58 @@ def settlement(
             logging.info(
                 "Processing settlement for particle_range {} out of {}".format(particle_range[ts_i], particle_range[-1][-1]))
 
-            for i in range(ts+1,ts+pld_int+1):
+            # I'm now only going to check the timestep at the end of the PLD
+            # When I am doing it for every PLD, it was too slow.
+            # If a future project needs active settlement at each time step then
+            # I will just write a separate biology script for it. It is too
+            # difficult to maintain this script for multiple uses.
+            i = ts+pld_int
+            if i >= len(status[0]): # setting this as >= instead of > because I'm using i as an index, so it has to be 1 less than the length
+                # check if the pld is greater than the steps written in the nc
+                # file. If every particle settles before a certain PLD, then
+                # it will be shorter.
+                # In that case, just use the last timestep available.
+                i = len(status[0])-1
+            
+            # remove particles that are not part of the current particle range
+            mask = np.isin(traj, particles)
+            t = traj[mask]       
 
-                if i == len(status[0]):
-                    # PLD_int is now larger than time steps
-                    # e.g. a 60 day pld, but everything settled by day 25
-                    logging.warning(
-                        'PLD exceeds time length. Exiting settlement at step {} for this group of particles'.format(i))
-                    break 
+            # since some particles may be masked at this timestep, find last
+            # timestep where a particle is not masked
+            lons_dest = []
+            lats_dest = []
+            time_steps = []
+            for particle in t:
+                index = np.where(traj[:] ==  particle)[0][0]
+                if np.ma.is_masked(lon[index][i]):
+                    # if the last value is masked then it must have stranded and we can 
+                    # search by where it is 1.
+                    # If a particle goes outside of the grid it gets coded as '2 - 
+                    # missing data'. Anything above 0 is considered deactivated.
+                    j = np.where(status[index] > 0)[0][0]
+                    lo = lon[index][j]
+                    lons_dest.append(lo)
+                    la = lat[index][j]
+                    lats_dest.append(la)
+                    time_steps.append(j)
+                else: # otherwise just use i
+                    lons_dest.append(lon[index][i])
+                    lats_dest.append(lat[index][i])
+                    time_steps.append(i)
 
-                # output_str = "settlement time step " + str(i) + " of " + str(pld_int)
-                # logging.info(output_str)
-
-                # get traj ids for particles that are active or where they were 
-                # active on the previous step (just stranded)
-                # NOTE: special case I may need to fix in the future: when running 
-                # backwards I had a particle that was 1 on the very first time step. 
-                # However, since it always seems to mask them after they are 1, I 
-                # could just select where == 1 and not worry about if the previous 
-                # step was 0.
-                t_strand = traj[np.where((status[:,[i]] == 1) & (status[:,[i-1]] == 0))[0]]
-                if i == ts+pld_int: # only check on the last time step
-                    t_active = traj[np.where(status[:,[i]] == 0)[0]]
-                
-                # remove particles that are not part of the current particle range
-                mask = np.isin(t_strand, particles)
-                t_strand = t_strand[mask]
-                if i == ts+pld_int:
-                    mask = np.isin(t_active, particles)
-                    t_active = t_active[mask]          
-
-                # if we already settled it on a previous iteration of the for loop 
-                # then remove it from the list so we don't check it again
-                t_strand = np.setdiff1d(t_strand, dest_df.traj_id.values)
-                if i == ts+pld_int:
-                    t_active = np.setdiff1d(t_active, dest_df.traj_id.values)
-
-                if i == ts+pld_int:
-                    if precomp > 0: # remove from p_active ones that are in their precomp period
-                        for period in precomp_range:
-                            if i in range(period[0],period[1]):
-                                period_index = precomp_range.index(period)
-                                # get particles that are still in their precomp period
-                                # don't need to do -1, since setdiff1d is based on values no index
-                                p_in_precomp = range(particle_range[period_index][0],particle_range[period_index][1])
-                                t_active = np.setdiff1d(t_active, p_in_precomp)
-
-                if i == ts+pld_int:
-                    t = np.concatenate((t_strand,t_active))
-                else:
-                    t = t_strand
-
-                if len(t) == 0:
-                    continue
-
-                # t is the actual trajectory ID, the index for that value is 1 less
-                lons = lon[t-1,i]
-                lats = lat[t-1,i]
-
-                df = pd.DataFrame()
-                df['d_coords'] = list(zip(lons, lats))
-                df['d_coords'] = df['d_coords'].apply(Point)
-                df['traj_id'] = list(t)
-                points = geopandas.GeoDataFrame(df, geometry='d_coords')
-                points.crs = {'init' :'epsg:4326'}
-                points = points.to_crs(crs_input_shp)
-                # This should be 1:M join. A point can overlap many MPAs:
-                pointInPolys = geopandas.tools.sjoin(points, poly, how='inner')
-                pointInPolys = pointInPolys.rename(columns={'uID_202011':'dest_id'})
-                pointInPolys['time_int'] = i
-                dest_df = dest_df.append(pointInPolys[['d_coords','traj_id','dest_id','time_int']], ignore_index=True)
+            df = pd.DataFrame()
+            df['d_coords'] = list(zip(lons_dest, lats_dest))
+            df['d_coords'] = df['d_coords'].apply(Point)
+            df['traj_id'] = list(t)
+            df['time_int'] = time_steps
+            points = geopandas.GeoDataFrame(df, geometry='d_coords')
+            points.crs = {'init' :'epsg:4326'}
+            points = points.to_crs(crs_input_shp)
+            # This should be 1:M join. A point can overlap many MPAs:
+            pointInPolys = geopandas.tools.sjoin(points, poly, how='inner')
+            pointInPolys = pointInPolys.rename(columns={'uID_202011':'dest_id'})
+            dest_df = dest_df.append(pointInPolys[['d_coords','traj_id','dest_id','time_int']], ignore_index=True)
     
     # join the two tables
     logging.info("merging destination and origin dataframes")
@@ -619,7 +601,12 @@ for file in nc_files:
     ncs.append(os.path.join(input_nc_dir, file))
 
 # reduce that range if if I don't want to run them all
-if cluster_run:  # nc_index gets added for cluster runs
+if cluster_run:  # nc_group gets added for cluster runs
+    for n in ncs:
+        base = os.path.splitext(os.path.basename(n))[0]
+        base = base.split('_')[1]
+        if int(base) == nc_group:
+            nc_index = ncs.index(n)
     ncs = ncs[nc_index:nc_index+1]
 else:
     nc_index = None
