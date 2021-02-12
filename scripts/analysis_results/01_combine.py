@@ -26,8 +26,9 @@ if not arcpy.Exists(arcpy.env.workspace):
 
 
 # copy in centroids once
-centroids = os.path.join(shps.format(sims[0]), 'patch_centroids.shp')
-arcpy.CopyFeatures_management(centroids, 'patch_centroids')
+if not arcpy.Exists('patch_centroids'):
+    centroids = os.path.join(shps.format(sims[0]), 'patch_centroids.shp')
+    arcpy.CopyFeatures_management(centroids, 'patch_centroids')
 
 
 # for each time period
@@ -35,25 +36,49 @@ arcpy.CopyFeatures_management(centroids, 'patch_centroids')
 # output to fgdb so that they can all be in 1 place
 for sim in sims:
     folder = shps.format(sim)
+    folder = os.path.join(folder, 'conn_lines')
     fl = os.listdir(folder)
     for pld in plds:
         files = []
         for file in fl:
             base_pld = file.split('_')[-1]
-            if file.startswith('connectivity') and base_pld == 'pld{}.shp'.format(str(pld)):
+            if base_pld == 'pld{}.shp'.format(str(pld)):
                 files.append(os.path.join(folder, file))
-        arcpy.Merge_management(files, 'connectivity_{}_pld{}'.format(sim, str(pld)))
+        fc = 'connectivity_{}_pld{}'.format(sim, str(pld))
+        if not arcpy.Exists(fc):
+            arcpy.Merge_management(files, fc)
+
+# for some reason from_id is a text field
+for fc in arcpy.ListFeatureClasses('connectivity*'):
+    arcpy.AddField_management(fc, 'f_temp', 'SHORT')
+    #arcpy.CalculateField_management(fc, 'f_temp', '!from_id!')
+    # Calculate field is giving me a weird error that Python is not installed.
+    with arcpy.da.UpdateCursor(fc, ['from_id', 'f_temp']) as cursor:
+        for row in cursor:
+            row[1] = int(row[0])
+            cursor.updateRow(row)
+    arcpy.DeleteField_management(fc, ['from_id'])
+    arcpy.AddField_management(fc, 'from_id', 'SHORT')
+    #arcpy.CalculateField_management(fc, 'from_id', '!f_temp!')
+    with arcpy.da.UpdateCursor(fc, ['f_temp', 'from_id']) as cursor:
+        for row in cursor:
+            row[1] = row[0]
+            cursor.updateRow(row)
+    arcpy.DeleteField_management(fc, ['f_temp'])
 
 
 # merge destination points per time period
 # this is going to be 3 million points per fc
 for sim in sims:
     folder = shps.format(sim)
-    fl = os.listdir()
+    folder = os.path.join(folder, 'dest_pts')
+    fl = os.listdir(folder)
     for pld in plds:
         files = []
         for file in fl:
             base_pld = file.split('_')[-1]
-            if file.startswith('dest') and base_pld == 'pld{}.shp'.format(str(pld)):
+            if base_pld == 'pld{}.shp'.format(str(pld)):
                 files.append(os.path.join(folder, file))
-        arcpy.Merge_management(files, 'destpts_{}_pld{}'.format(sim, str(pld)))
+        fc = 'destpts_{}_pld{}'.format(sim, str(pld))
+        if len(files) > 0 and not arcpy.Exists(fc):
+            arcpy.Merge_management(files, fc)
