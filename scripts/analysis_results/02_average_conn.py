@@ -29,10 +29,11 @@ for pld in plds:
     files = []
     for sim in sims:
         folder = shps.format(sim)
+        folder = os.path.join(folder, 'conn_lines')
         fl = os.listdir(folder)
         for file in fl:
             base_pld = file.split('_')[-1]
-            if file.startswith('connectivity') and base_pld == 'pld{}.shp'.format(str(pld)):
+            if base_pld == 'pld{}.shp'.format(str(pld)):
                 files.append(os.path.join(folder, file))
 
     # put them all in geodataframe
@@ -47,28 +48,28 @@ for pld in plds:
         freq = ('from_id', 'count'),
         prob_avg = ('prob', mean_cust_denom),
         time_int = ('time_int', 'first'),
-        totalori = ('totalori', 'sum'),    # check these two fields. New.
+        totalori = ('totalori', 'sum'),
         totquant = ('quantity', 'sum'),
         date_start = ('date_start', 'first'),
         geometry = ('geometry', 'first')
         )
-    gdf_group = gdf_group.astype({'time_int':int, 'totalori':int})
+    gdf_group = gdf_group.astype({'time_int':int, 'totalori':int, 'totquant':int})
     gdf_group = gdf_group.reset_index()
 
     # output
     gdf_f = gp.GeoDataFrame(gdf_group, crs=gdf.crs)
-    gdf_f.to_file(filename=os.path.join(root, 'conn_avg_pld{}'.format(str(pld))), driver='ESRI Shapefile')
+    gdf_f.to_file(filename=os.path.join(root, 'conn_avg_pld{}.shp'.format(str(pld))), driver='ESRI Shapefile')
 
 
 # output to feature class
 # need to switch to arcpro environment
 # kinda hokey, but you can't install geopandas in the arcpro environment
-# delete shapefile after
+# delete shapefiles after
 import arcpy
+root = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\cluster_results'
 gdb = r'COMBINED.gdb'
 arcpy.env.workspace = os.path.join(root, gdb)
 fl = os.listdir(root)
-files = []
 for file in fl:
     name = os.path.splitext(file)[0]
     ext = os.path.splitext(file)[1]
@@ -77,7 +78,6 @@ for file in fl:
 
 # delete shapefiles
 fl = os.listdir(root)
-files = []
 for file in fl:
     name = os.path.splitext(file)[0]
     ext = os.path.splitext(file)[1]
