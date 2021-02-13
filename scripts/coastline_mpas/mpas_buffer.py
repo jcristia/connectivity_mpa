@@ -20,7 +20,7 @@ sel_intersect = arcpy.SelectLayerByLocation_management(mpas_og, 'INTERSECT', lan
 sel_fc = arcpy.CopyFeatures_management(sel_intersect, 'MB01_mpa_selectbylocation')
 
 # buffer by 100m
-buff_fc = arcpy.Buffer_analysis(sel_fc, 'MB02_mpa_buffer100m', '100 meters', dissolve_option='NONE')
+buff_fc = arcpy.Buffer_analysis(sel_fc, 'MB02_mpa_buffer100m', '200 meters', dissolve_option='NONE')
 
 # clip to coastline
 clipped_fc = arcpy.Clip_analysis(buff_fc, landmask, 'MB03_mpa_cliptoland')
