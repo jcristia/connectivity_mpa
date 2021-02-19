@@ -298,63 +298,77 @@ def settlement(
     return origin_dest
 
 ###################
-# Add the final destination coordinates to particles that did not settle on a patch
-# The was originally not set up to deal with the PLD and settlement as I have it
-# now. So, as of now I am just running this for PLD of 60. That is the only one
-# where it is relevant to see where particles ended up that did not settle.
-# In the future, I could revisit this and make it so that I find the location of
-# particles at the end of a PLD. However, this would require dealing with the
-# delayed release issue. Since I don't use the dest_pts shapefiles for much, I
-# am just going to let this go for now.
-
-# If I do decide to revisit this, this is where age_seconds would be useful.
-# Instead of dealing with timestep of release, I just look for where each particle
-# is x seconds old. If it is masked at that value, then just look for where it
-# is 1 (stranded).
+#
+#  Add the final destination coordinates to particles that did not settle on a patch
+#
 ###################
 
-def get_destination_coords(origin_dest, traj, lon, lat, timestep, crs_input_shp, status):
+def get_destination_coords(
+    origin_dest, traj, lon, lat, timestep, crs_input_shp, status, particle_range,
+    pld_int, timesteps_with_release):
 
-    logging.info("getting destination coordinates")
-    lons_dest = []
-    lats_dest = []
-    time_steps = []
-    for i in range(len(traj)):
-        if np.ma.is_masked(lon[i][-1]):
-            # if the last value is masked then it must have stranded and we can 
-            # search by where it is 1.
+    dest_df = pd.DataFrame(columns=['Coordinates','traj_id','time_step'])
 
-            # If a particle goes outside of the grid it gets coded as '2 - 
-            # missing data'. Anything above 0 is considered deactivated.
-            j = np.where(status[i] > 0)[0][0]
-            lo = lon[i][j]
-            lons_dest.append(lo)
-            la = lat[i][j]
-            lats_dest.append(la)
+    for ts_i in range(0,len(timesteps_with_release)):
+        # Check the destination of all particles that did not settle at the end
+        # of the PLD.
+        # However, since some particles are on a delay release, I need to account
+        # for the pld plus the additional timesteps that they were delayed
 
-            # timestep
-            index = j
-            time_steps.append(index)
+        ts = timesteps_with_release[ts_i]
+        particles = list(range(particle_range[ts_i][0],particle_range[ts_i][1]))
 
-        else: # otherwise just get the last coordinate
-            lons_dest.append(lon[i][-1])
-            lats_dest.append(lat[i][-1])
-            time_steps.append(len(lon[i]))
+        logging.info(
+            "Getting destination coordinates for particle_range {} out of {}".format(particle_range[ts_i], particle_range[-1][-1]))
 
-    df = pd.DataFrame()
-    df['Coordinates'] = list(zip(lons_dest, lats_dest))
-    df['Coordinates'] = df['Coordinates'].apply(Point)
-    df['traj_id'] = list(traj)
-    df['time_step'] = time_steps
-    points_dest = geopandas.GeoDataFrame(df, geometry='Coordinates')
-    points_dest.crs = {'init' :'epsg:4326'}
-    points_dest = points_dest.to_crs(crs_input_shp)
+        i = ts+pld_int
+        if i >= len(status[0]): # setting this as >= instead of > because I'm using i as an index, so it has to be 1 less than the length
+            # check if the pld is greater than the steps written in the nc
+            # file. If every particle settles before a certain PLD, then
+            # it will be shorter.
+            # In that case, just use the last timestep available.
+            i = len(status[0])-1
+        
+        # remove particles that are not part of the current particle range
+        mask = np.isin(traj, particles)
+        t = traj[mask]
+
+        lons_dest = []
+        lats_dest = []
+        time_steps = []
+        for particle in t:
+            index = np.where(traj[:] == particle)[0][0]
+            if np.ma.is_masked(lon[index][i]):
+                # if the value at that pld is masked then it must have stranded eariler
+                # and we can search by where it is 1.
+                # If a particle goes outside of the grid it gets coded as '2 - 
+                # missing data'. Anything above 0 is considered deactivated.
+                j = np.where(status[index] > 0)[0][0]
+                lo = lon[index][j]
+                lons_dest.append(lo)
+                la = lat[index][j]
+                lats_dest.append(la)
+                time_steps.append(j)
+            else: # otherwise just use i
+                lons_dest.append(lon[index][i])
+                lats_dest.append(lat[index][i])
+                time_steps.append(i)
+
+        df = pd.DataFrame()
+        df['Coordinates'] = list(zip(lons_dest, lats_dest))
+        df['Coordinates'] = df['Coordinates'].apply(Point)
+        df['traj_id'] = list(t)
+        df['time_step'] = time_steps
+        points_dest = geopandas.GeoDataFrame(df, geometry='Coordinates')
+        points_dest.crs = {'init' :'epsg:4326'}
+        points_dest = points_dest.to_crs(crs_input_shp)
+        dest_df = dest_df.append(points_dest[['Coordinates', 'traj_id', 'time_step']], ignore_index=True)
 
     # join, fill in values where null, remove columns
     logging.info("joining destination coordinates to dataframe")
-    points_dest = points_dest.infer_objects()
-    points_dest.traj_id = points_dest.traj_id.astype('float')
-    origin_dest = origin_dest.merge(points_dest, on='traj_id')
+    dest_df = dest_df.infer_objects()
+    dest_df.traj_id = dest_df.traj_id.astype('float')
+    origin_dest = origin_dest.merge(dest_df, on='traj_id')
     origin_dest['time_int'].loc[origin_dest['time_int'].isnull()] = origin_dest['time_step']
     origin_dest['d_coords'].loc[origin_dest['d_coords'].isnull()] = origin_dest['Coordinates']
     origin_dest = origin_dest.drop(['time_step', 'Coordinates'], axis=1)
@@ -662,14 +676,10 @@ for ncf in ncs:
             timesteps_with_release
             )
 
-        if pld == 60:
-            # this doesn't make sense to do for shorter PLDs
-            # it is set up now to write the final location of points
-            # I don't use the destination point shapefiles for much, so I'm not
-            # going to worry about this for now
-            origin_dest = get_destination_coords(
-                origin_dest, traj, lon, lat, timestep, crs_input_shp, status
-                )
+        origin_dest = get_destination_coords(
+            origin_dest, traj, lon, lat, timestep, crs_input_shp, status,
+            particle_range, pld_int, timesteps_with_release
+            )
 
         origin_dest_mort, mortality_p = calc_mortality(
             mortality_rate, traj, timestep, origin_dest, time_step_output, 
@@ -683,9 +693,8 @@ for ncf in ncs:
         origin_dest_mort = fill_na(origin_dest_mort)
 
         ### outputs
-        if pld == 60:
-            shp_out = os.path.join(dest_pts_dir, 'dest_biology_pts_{}_pld{}.shp'.format(base, str(pld)))
-            out_shp_dest_points(origin_dest_mort, crs_input_shp, shp_out, date_start)
+        shp_out = os.path.join(dest_pts_dir, 'dest_biology_pts_{}_pld{}.shp'.format(base, str(pld)))
+        out_shp_dest_points(origin_dest_mort, crs_input_shp, shp_out, date_start)
 
         if settlement_apply:
             conn_lines_out = os.path.join(conn_lines_dir, 'connectivity_{}_pld{}.shp'.format(base, str(pld)))
