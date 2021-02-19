@@ -10,7 +10,7 @@ import arcpy
 import os
 
 
-root = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\cluster_results'
+root = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\cluster_results\scripts'
 shps = os.path.join(root, 'sim{}/outputs/shp')
 sims = [
     '1101','1105','1108',

@@ -7,7 +7,7 @@ import os
 import pandas as pd
 import geopandas as gp
 
-root = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\cluster_results'
+root = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\cluster_results\scripts'
 shps = os.path.join(root, 'sim{}/outputs/shp')
 sims = [
     '1101','1105','1108',
@@ -66,7 +66,7 @@ for pld in plds:
 # kinda hokey, but you can't install geopandas in the arcpro environment
 # delete shapefiles after
 import arcpy
-root = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\cluster_results'
+root = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\cluster_results\scripts'
 gdb = r'COMBINED.gdb'
 arcpy.env.workspace = os.path.join(root, gdb)
 fl = os.listdir(root)

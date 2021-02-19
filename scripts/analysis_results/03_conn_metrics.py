@@ -9,7 +9,7 @@ import os
 
 
 
-root = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\cluster_results'
+root = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\cluster_results\scripts'
 input_gdb = 'COMBINED.gdb'
 output_gdb = r'CONN_METRICS.gdb'
 plds = [1,3,7,10,21,30,40,60]
