@@ -369,8 +369,8 @@ def get_destination_coords(
     dest_df = dest_df.infer_objects()
     dest_df.traj_id = dest_df.traj_id.astype('float')
     origin_dest = origin_dest.merge(dest_df, on='traj_id')
-    origin_dest['time_int'].loc[origin_dest['time_int'].isnull()] = origin_dest['time_step']
-    origin_dest['d_coords'].loc[origin_dest['d_coords'].isnull()] = origin_dest['Coordinates']
+    origin_dest['time_int'].loc[origin_dest['time_int'].isnull()] = origin_dest['time_step']    # still getting warnings here (even though it works)
+    origin_dest['d_coords'].loc[origin_dest['d_coords'].isnull()] = origin_dest['Coordinates']  # in the future try: origin_dest.loc[origin_dest['d_coords'].isnull(), 'd_coords'] = origin_dest['Coordinates']
     origin_dest = origin_dest.drop(['time_step', 'Coordinates'], axis=1)
 
     origin_dest = origin_dest.sort_values(by=['traj_id'])
