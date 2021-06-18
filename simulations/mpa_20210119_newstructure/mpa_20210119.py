@@ -5,7 +5,7 @@
 # reader dates
 dates = '20110101_20110316'
 # shapefile group
-shp_group = 1
+shp_group = 9
 
 
 
@@ -84,7 +84,7 @@ for i in range(num_steps):
             featurenum = feature.GetFID() + 1 # opendrift subtracts 1 for some reason
             uID = feature.GetField('uID_202011')
             particles = feature.GetField('part_num')
-            part_fact = 0.1 # factor to reduce particle count for testing
+            part_fact = 1 # factor to reduce particle count for testing
             particles = int(particles * part_fact)
 
             o.seed_from_shapefile(
@@ -132,4 +132,5 @@ print(o)
 #o.animation()
 
 #####################
+
 
