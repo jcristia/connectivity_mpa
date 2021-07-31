@@ -516,6 +516,11 @@ def connection_lines(origin_dest_mort, shp_og, crs_input_shp, conn_lines_out, da
 
     # on od, select particles where time_int_s minus time_int is less than or equal to PLD
     od_pld = od[(od.time_int - od.time_int_s <= pld_int)]
+    # JC 20210730: I correctly calculate the time to include a connection or not, but
+    # I do not carry the correctly calculated time forward as time_int. This was disocvered
+    # too late to rerun this script, but it luckily does not change any results.
+    # I deal with this issue in the 02_average_conn.py script.
+    # Future use of this script may want to fix how time_int is carried forward.
 
     # get each unique combination of originID and destID and get count of particles that survived
     od_unique = od_pld[(od_pld.dest_id != -1) & (od_pld.mortstep == -1)].groupby(['uID_part','dest_id']).size().reset_index(name='Freq')
