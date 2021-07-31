@@ -13,6 +13,7 @@ scripts/script_generator/jobs
 scripts/script_generator/scripts
 simulations/mpa_20210125_STAGING/*.sh
 simulations/mpa_20210125_STAGING/scripts
+scripts/distance_analysis/distance_analysis_mapping
 
 *.csv
 *.xlsx
