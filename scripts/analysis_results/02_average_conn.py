@@ -41,19 +41,21 @@ for pld in plds:
     for shp in files:
         gdf = gp.read_file(shp)
         gdf_all = gdf_all.append(gdf)
+    gdf_all['pld'] = int(pld)
     gdf_all = gdf_all.astype({'from_id':int, 'to_id':int}) # there's still a mix of datatypes in the columns for some reason. This was super important to do or else the code below didn't recognize duplicates.
 
     # average
     gdf_group = gdf_all.groupby(['from_id', 'to_id']).agg(
         freq = ('from_id', 'count'),
         prob_avg = ('prob', mean_cust_denom),
-        time_int = ('time_int', 'first'),
+        #time_int = ('time_int', 'first'), # no longer including this since it was not included correctly from the biology script
         totalori = ('totalori', 'sum'),
         totquant = ('quantity', 'sum'),
         date_start = ('date_start', 'first'),
-        geometry = ('geometry', 'first')
+        geometry = ('geometry', 'first'),
+        pld = ('pld', 'first')
         )
-    gdf_group = gdf_group.astype({'time_int':int, 'totalori':int, 'totquant':int})
+    gdf_group = gdf_group.astype({'totalori':int, 'totquant':int})
     gdf_group = gdf_group.reset_index()
 
     # output
