@@ -5,6 +5,7 @@
 !scripts/
 !opendrift-1.4.2/
 !simulations/
+!*.pptx
 
 # then exclude specific folder and file types
 output
