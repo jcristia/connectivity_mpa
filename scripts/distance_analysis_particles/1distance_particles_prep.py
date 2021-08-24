@@ -1,6 +1,8 @@
 # prep data for overwater distance analysis between origin and destination of
 # all particles that settle
 
+# I should have put all this in functions. Oh well.
+
 # The challenge is...
 # Some MPAs are very large and it doesn't make sense to just represent it as one
 # point in a distance analysis, but I also can't do a distance analysis between 
@@ -78,7 +80,6 @@ if not arcpy.Exists('origin_coordinates'):
 # groupby/agg. I would be grouping at least 9 different points.
 arcpy.env.workspace = dest_fcs
 fcs_orig = arcpy.ListFeatureClasses('destpts*')
-fcs_orig = fcs_orig[:2]  # REMOVE LATER ########################
 for fc in fcs_orig:
     print("Copying feature "+fc)
     arcpy.CopyFeatures_management(fc, os.path.join(out_gdb, fc))
@@ -274,7 +275,7 @@ arcpy.CalculateField_management(outname, 'uID_ref_origin', '!NEAR_FID!')
 #########################################
 
 # I now have the two centroid datasets to calculate distances between:
-# "CENTROIDS_origin" and "CENTROIDS_dest"
+# "CENTROIDS_origin(_exclude)" and "CENTROIDS_dest"
 # In the next script, I will step through each point in the origins centroid 
 # dataset, and then I can do a selection to get the centroids that are its destination
 
