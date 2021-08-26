@@ -169,9 +169,10 @@ for fc in fcs:
 # However, this doesn't solve everything. See next group of comments...
 
 # make centroids of just ones that overlap the ocean
-rasts = arcpy.ListRasters('recruit*')
-outCellStats = CellStatistics(rasts, 'SUM', 'DATA')
-outCellStats.save('recruit_ALL')
+rasts = arcpy.ListRasters('recruit_1*')
+arcpy.env.extent = 'land_r_500' # super important to set this, cells weren't being included initially
+outCellStats = CellStatistics(rasts, 'VARIETY', 'DATA')
+outCellStats.save('recruit_All')
 arcpy.AddField_management('recruit_All', 'uID_rast', 'LONG')
 arcpy.CalculateField_management('recruit_All', 'uID_rast', '!OBJECTID!') # values need to be unique or else RasterToPolygon merges non-unique values
 arcpy.RasterToPolygon_conversion('recruit_All', 'recruit_All_poly', 'NO_SIMPLIFY', 'uID_rast')
@@ -214,6 +215,7 @@ for fc in fcs:
 # Make raster
 snapras = 'land_r_500'
 arcpy.env.snapRaster = snapras
+arcpy.env.extent = snapras
 arcpy.env.outputCoordinateSystem = 'land_r_500'
 arcpy.PointToRaster_conversion('origin_coordinates', '', 'origin_coordinates_r', cellsize=1000)
 # Centroids
@@ -236,7 +238,7 @@ print('Copying origin points')
 outname = 'near_ORIGIN'
 arcpy.CopyFeatures_management('origin_coordinates', outname)
 print('Near analysis on '+outname)
-arcpy.Near_analysis(outname, 'CENTROIDS_origin', 1500, 'NO_LOCATION', 'NO_ANGLE', 'PLANAR')
+arcpy.Near_analysis(outname, 'CENTROIDS_origin', 5000, 'NO_LOCATION', 'NO_ANGLE', 'PLANAR')
 print('Adding and calculating new near field id for '+outname)
 arcpy.AddField_management(outname, 'uID_ref_origin', 'LONG')
 arcpy.CalculateField_management(outname, 'uID_ref_origin', '!NEAR_FID!')
