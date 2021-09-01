@@ -36,6 +36,7 @@ arcpy.env.workspace = prep_gdb
 fcs_particles = arcpy.ListFeatureClasses('near_1*')
 for fc in fcs_particles:
     
+    print('processing ' + fc)
     # read in fc as df
     field_names = ['traj_id_u', 'uID_ref_dest']
     cursor = arcpy.da.SearchCursor(fc, field_names)
