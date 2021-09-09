@@ -3,6 +3,7 @@
 
 import arcpy
 import pandas as pd
+import numpy as np
 import pyarrow.feather as feather
 
 output_dir = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\scripts\particles_df\output'
@@ -78,8 +79,8 @@ for period in periods:
         field_names = [i.name for i in arcpy.ListFields(dest_pts)]
         cursor = arcpy.da.SearchCursor(dest_pts, field_names)
         df_dpts = pd.DataFrame(data=[row for row in cursor], columns=field_names)
-        df_dpts = df_dpts.drop(['OBJECTID', 'Shape'], axis=1)
-        df_dpts = df_dpts.rename(columns={'POINT_X':'dest_x', 'POINT_Y':'dest_y'})
+        df_dpts = df_dpts.drop(['OBJECTID', 'Shape', 'time_int_s', 'mortstep', 'time_int', 'dest_id'], axis=1)
+        df_dpts = df_dpts.rename(columns={'POINT_X':'dest_x', 'POINT_Y':'dest_y', 'uID_part':'mpa_part_id_orig'})
         arcpy.Delete_management(dest_pts)
 
         # Add fields
@@ -88,19 +89,6 @@ for period in periods:
         df_dpts['month'] = pd.to_numeric(df_dpts.date_start.str[5:7])
         df_dpts['period_id'] = period
         df_dpts = df_dpts.drop(['date_start'], axis=1)
-
-        # Rename fields
-        df_dpts = df_dpts.rename(
-            columns={
-                'time_int_s':'time_start', 
-                'mortstep':'mort_step',
-                'time_int':'settlestrand_step',
-                'dest_id':'mpa_part_id_dest',
-                'uID_part':'mpa_part_id_orig'
-                })
-        # Adjust settle and mortality time steps by start time
-        df_dpts['settlestrand_step'] = df_dpts.settlestrand_step - df_dpts.time_start
-        df_dpts['mort_step'] = df_dpts.mort_step - df_dpts.time_start
 
         # join destination points to origin points
         # The order is key here. By joining to df_opts and doing an inner or
@@ -125,6 +113,19 @@ for period in periods:
         # there will be fewer particles in this dataset since it is only ones that settled/stranded
         df_od = df_od.merge(df_dist, how='left', on='traj_id_u')
         df_od = df_od.rename(columns={'PathCost':'distance'})
+        # add 1/0 field for successful settlement. Only ones with a distance
+        # value successfully stranded on the coastline. It's only in this script
+        # where I did the intersect with the entire coastline and 30m bathy. The
+        # timing columns (i.e. dest_id, time_int) are not helpeful in this case
+        # since they only relate to mpa settlement.
+        df_od['settle'] = np.where(~df_od.distance.isnull(), 1, None)
+
+        # convert all floats to ints to cut down on size
+        df_od['mpa_part_id_orig'] = df_od.mpa_part_id_orig.astype(int)
+        df_od['origin_x'] = df_od.origin_x.astype(int)
+        df_od['origin_y'] = df_od.origin_y.astype(int)
+        df_od['dest_x'] = df_od.dest_x.astype(int)
+        df_od['dest_y'] = df_od.dest_y.astype(int)
 
         # add master unique ID
         df_od = df_od.reset_index(drop=True)
