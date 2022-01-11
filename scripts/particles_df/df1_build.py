@@ -15,7 +15,7 @@ dist_summary_gdb = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivi
 fetch_gdb = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\scripts\fetch\fetch3_post.gdb'
 mpas = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas.gdb\M09_mpa_joined'
 mpas_exclude = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas.gdb\M10_toexcludefromanalysis'
-
+ocean_id = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas.gdb\ocean_groupings_glmm_mpas'
 
 #######################################
 # Common pieces, outside for-loop
@@ -32,7 +32,7 @@ field_names = [i.name for i in arcpy.ListFields(mpas)]
 cursor = arcpy.da.SearchCursor(mpas, field_names)
 df_mpas = pd.DataFrame(data=[row for row in cursor], columns=field_names)
 df_mpas = df_mpas[df_mpas.uID_20201124.isin(to_include)] # remove mpas to exlude
-keep_fields = ['uID_20201124', 'provstate']
+keep_fields = ['uID_20201124', 'provstate', 'Shape_Area']
 drop_fields = []
 for col in df_mpas.columns:
     if col not in keep_fields:
@@ -58,6 +58,13 @@ field_names = [i.name for i in arcpy.ListFields(fetch_pts)]
 cursor = arcpy.da.SearchCursor(fetch_pts, field_names)
 df_fetch = pd.DataFrame(data=[row for row in cursor], columns=field_names)
 df_fetch = df_fetch.drop(['OBJECTID', 'uID_ref_origin'], axis=1)
+
+# Get ocean grouping (somewhat arbitrary grouping by region to include as a random effect)
+field_names = [i.name for i in arcpy.ListFields(ocean_id)]
+cursor = arcpy.da.SearchCursor(ocean_id, field_names)
+df_ocid = pd.DataFrame(data=[row for row in cursor], columns=field_names)
+df_ocid = df_ocid.drop(['OBJECTID', 'uID_original', 'partID', 'group_name', 'mpa_area'], axis=1)
+df_ocid = df_ocid.rename(columns={'uID_20201124':'mpa_part_id_orig'})
 
 
 #######################################
@@ -100,9 +107,14 @@ for period in periods:
 
         # join mpas to get provstate
         df_od = df_od.merge(df_mpas, how='inner', on='mpa_part_id_orig')
+        df_od['mpa_area'] = df_od.Shape_Area.astype(int)
+        df_od = df_od.drop(['Shape_Area'], axis=1)
 
         # join fetch
         df_od = df_od.merge(df_fetch, how='inner', on='traj_id_u')
+
+        # join ocean grouping id
+        df_od = df_od.merge(df_ocid, how='inner', on='mpa_part_id_orig')
 
         # read in particle distances and join
         dist_fc = os.path.join(dist_summary_gdb, f'distance_{period}_pld{pld}')
