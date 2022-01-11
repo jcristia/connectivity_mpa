@@ -1,3 +1,5 @@
+# NOT USING THIS ANYMORE
+
 # Combine individual feather files into 1 big file
 # env: plotting
 
