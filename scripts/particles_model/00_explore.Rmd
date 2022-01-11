@@ -1,0 +1,137 @@
+---
+title: "00_explore"
+output: html_document
+---
+
+
+**open_dataset** just creates a binding, which we will need to do for our larger
+dataset, but here we can use **read_feather** to read it all into memory
+
+```{r message=FALSE}
+library(arrow)
+file = '~/GIS/MSc_Projects/MPA_connectivity/scripts/particles_df/output_all/sample_1.feather'
+df <- open_dataset(file, format='feather')
+df <- read_feather(file)
+```
+
+Start poking around
+I'm going to focus on just the **distance** model for now.
+
+```{r}
+library(tidyverse)
+
+# get df with nan records removed. I didn't calc distance for ones that did not
+# settle
+df <- na.omit(df)
+
+# see how exposure is distributed
+ggplot(df, aes(total_exposure)) +
+  geom_histogram()
+
+# distance
+ggplot(df, aes(distance)) +
+  geom_histogram()
+
+# distance
+ggplot(df, aes(log(distance))) +
+  geom_histogram()
+
+# distance vs. exposure
+ggplot(df, aes(total_exposure, distance)) + 
+  geom_point()
+
+ggplot(df, aes(log(total_exposure), log(distance))) + 
+  geom_point()
+
+# distance vs. PLD
+ggplot(df, aes(pld, distance)) + 
+  geom_point(position = position_jitter(height = 0.2))
+
+# distance vs. exposure, colored by PLD
+ggplot(df, aes(total_exposure, distance, colour = as.factor(pld))) + 
+  geom_point()
+
+# distance vs. exposure, facet PLD
+ggplot(df, aes(total_exposure, distance)) + 
+  geom_point() +
+  facet_wrap(~pld)
+
+# distance vs. exposure, facet PLD
+ggplot(df, aes(log(total_exposure), log(distance))) + 
+  geom_point() +
+  facet_wrap(~pld)
+
+# map of origin locations
+ggplot(df) +
+  geom_point(aes(origin_x, origin_y, size = distance)) +
+  scale_size_continuous(range = c(1, 8)) +
+  coord_equal()
+
+```
+
+
+
+
+
+Let's just throw some paint at the wall so that I have something to discuss with Patrick
+
+
+
+```{r}
+library(lme4)
+
+m1 <- glm(distance ~ pld + total_exposure, data=df, family=gaussian(link='identity'))
+arm::display(m1)
+
+m2 <- glm(distance ~ pld + total_exposure, data=filter(df, distance>0), family=Gamma(link='log'))
+arm::display(m2)
+plot(ggeffects::ggpredict(m2)) %>%
+  cowplot::plot_grid(plotlist = .)
+
+m3 <- glmer(distance ~ pld + total_exposure + (1 | mpa_part_id_orig), data=filter(df, distance>0), family=Gamma(link='log'))
+
+# so don't I only need to rescale if I am including interactions between my predictors?
+# I don't think we have enough data in the sample dataset from each mpa to include mpa_part_id_orig
+
+
+library(sdmTMB)
+
+df <- filter(df, distance>0)
+df <- sample_n(df, 500)
+
+mesh <- make_mesh(df, c('origin_x', 'origin_y'), cutoff=12)
+# TODO: look into the mesh more: https://pbs-assess.github.io/sdmTMB/reference/make_mesh.html
+plot(mesh)
+
+# tweedie is similar to gamma but it allows you to have zeros???
+
+m4 <- sdmTMB(
+  distance ~ 1, data = df,
+  spde = mesh, family = tweedie(link = 'log'),
+  spatial_trend = TRUE, time = 'month',
+  spatial_only = TRUE
+)
+
+m5 <- sdmTMB(
+  distance ~ 1, data = df,
+  spde = mesh, family = tweedie(link = 'log'),
+  spatial_trend = TRUE, time = 'month',
+  spatial_only = FALSE
+)
+
+d <- df
+d$residuals4 <- residuals(m4)
+d$residuals5 <- residuals(m5)
+qqnorm(d$residuals4);abline(a = 0, b = 1)
+qqnorm(d$residuals5);abline(a = 0, b = 1)
+
+
+
+
+```
+
+
+
+
+
+
