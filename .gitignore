@@ -17,6 +17,8 @@ simulations/mpa_20210125_STAGING/scripts
 scripts/distance_analysis/distance_analysis_mapping
 scripts/distance_analysis/components_mapping
 scripts/distance_analysis/conns_established_mapping
+scripts/particles_model/.Rproj.user
+*PT_emails.txt
 
 *.csv
 *.xlsx
@@ -41,6 +43,12 @@ scripts/distance_analysis/conns_established_mapping
 *.nc
 *.npy
 *.log
+
+*.rds
+*.Rproj
+*.jpg
+*.RData
+*.Rhistory
 
 *.code-workspace
 *settings.json
