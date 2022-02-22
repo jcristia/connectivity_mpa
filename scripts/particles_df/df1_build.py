@@ -24,7 +24,7 @@ ocean_id = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spati
 to_include = []
 with arcpy.da.SearchCursor(mpas_exclude, ['uID_20201124', 'exclude']) as cursor:
     for row in cursor:
-        if not row[1] == 1:
+        if not row[1] in [1,2]:
             to_include.append(row[0])
 
 # get mpas as df
