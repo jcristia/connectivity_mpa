@@ -16,8 +16,8 @@ gdb = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\scripts\me
 arcpy.env.workspace = gdb
 metapop_pers = f'metapop_pers_centroids'
 
-plds = [21,30,40]
-larvae_dispersing_per_adult = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35]
+plds = [1, 10, 21, 60]
+larvae_dispersing_per_adult = [0.25]
 mort_rates = [0.10]
 
 
