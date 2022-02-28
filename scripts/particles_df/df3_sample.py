@@ -13,8 +13,14 @@ output_dir_ind = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity
 # They are separated out by date and pld, so this makes it easy
 # This will be just for the DISTANCE MODEL
 
-fraction = 0.0005
-output_label = '0005'
+# [0.000001, 0.000005, 0.00001, 0.00005, 0.0001, 0.0005, 0.001, 0.005, 0.01, 
+# 0.02, 0.03, 0.04, 0.05, 0.06, 0.07]
+
+# I've found that 0.00001 is the smallest percentage we can do.
+# Not enough points get selected for some MPAs, which just adds 1 row by default.
+
+fraction = 0.07
+output_label = '07'
 
 files = [os.path.join(output_dir_ind, f) for f in os.listdir(output_dir_ind)]
 # Get unique list of MPAs
@@ -29,7 +35,7 @@ for file in files:
     df_dist = df[~df.distance.isna()]
     # Remove ones that have exposure values of 0 (there are only ~4000 out of 2.7 million)
     df_exp = df_dist[df_dist.total_exposure != 0]
-    # For distance values of 0, assign a value between 1 and 250
+    # For distance values of 0, assign a value between 1 and 250 (NO LONGER DOING THIS)
     # Distances can be zero when the origin and dest ref points are the same. We make them 1 so that we can use a gamma distribution in the model. Points are spaced up to 500m apart, so they could have traveled up to that distance anyways.
     #df_sel_length = len(df_exp.loc[(df_exp.distance == 0), 'distance'])
     #df_exp.loc[(df_exp.distance == 0), 'distance'] = np.random.randint(1, 353, df_sel_length) # uniform dist.
