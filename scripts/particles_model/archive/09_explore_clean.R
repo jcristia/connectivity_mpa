@@ -145,8 +145,10 @@ r_gamma <- DHARMa::createDHARMa(
   simulatedResponse = s_gamma,
   observedResponse = df_tg$distance,
   fittedPredictedResponse = pred_fixed)
-plot(r_gamma)
+plot(r_gamma, quantreg=FALSE)
 DHARMa::testResiduals(r_gamma)
+DHARMa::plotQQunif(r_gamma, testUniformity = FALSE, testOutliers = FALSE, testDispersion = FALSE)
+
 
 # So in interpreting all of this:
 # The qqplot doesn't look terrible, but...
@@ -298,7 +300,22 @@ predictions %>%
 
 
 # Export model so that I can make these maps pretty in ArcGIS
-write.csv(predictions, 'predictions.csv')
+pred_out <- predictions %>% st_drop_geometry() # you get errors in arc if this column is kept in
+pred_out['origin_x'] <- pred_out$origin_x_km * 1000
+pred_out['origin_y'] <- pred_out$origin_y_km * 1000
+pred_out['est_km'] <- exp(pred_out$est) / 1000
+pred_out['est_non_rf_km'] <- exp(pred_out$est_non_rf) / 1000
+# to get omega and epsilon in km, you can't just exp() the value.
+# I'm calculating these assuming that:
+# omega_s contribution is applied after fixed effects
+# then epsilon_st is the remaining difference.
+# I'm not sure about this and need to look into it further.
+# Patrick doesn't think that this is right. Sean does plot just exp(est_non_rf),
+# but Patrick thinks that this was just for illustrative purposes and that
+# you can't convert this to any meaningful values.
+pred_out['omegas_km'] <- exp(pred_out$est_non_rf + pred_out$omega_s)/1000 - pred_out$est_non_rf_km
+pred_out['epsilonst_km'] <- pred_out$est_km - pred_out$omegas_km - pred_out$est_non_rf_km
+write.csv(pred_out, 'predictions.csv')
 
 
 
@@ -317,8 +334,8 @@ min_exposure = log(min(df_tg$total_exposure))
 max_exposure = log(max(df_tg$total_exposure))
 gradient <- seq(min_exposure, max_exposure,length.out=25)
 gradient <- exp(gradient)
-mpa_unique <- sample(unique(df_tg$mpa_part_id_orig),3)
-pld_vals <- c(1,10,60)
+mpa_unique <- sample(unique(df_tg$mpa_part_id_orig),5)
+pld_vals <- c(1,3,7,10,21,30,40,60)
 month <- 5L
 # expand.grid creates a dataframe of all unique combinations
 predictor_df <- expand.grid(
@@ -356,8 +373,10 @@ ggplot(p1, aes(log(total_exposure), exp(est),
   scale_colour_viridis_d(name='PLD (days)', guide = guide_legend(reverse=TRUE)) +
   scale_fill_viridis_d(name='PLD (days)', guide = guide_legend(reverse=TRUE)) +
   coord_cartesian(expand = F) +
-  labs(x = "Exposure log(m)", y = "Distance (m)")
-ggsave('distanceVexposure.jpg')
+  labs(x = "Exposure at origin site  log(m)", y = "Predicted distance (m)")+
+  theme_classic() +
+  theme(aspect.ratio=1/1.5)
+ggsave('fig07_preddistanceVexposure.jpg')
 
 
 
