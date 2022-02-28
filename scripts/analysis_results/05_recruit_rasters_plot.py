@@ -95,24 +95,25 @@ df = pd.read_csv(os.path.join(root, 'scripts/analysis_results', 'recruit_totals.
 
 #### plots ####
 
-df['PD'] = df.pld
-df['PD'] = df.PD.astype('int')
-df['PD'] = df.PD.astype('str') # seaborn hue needs to be a string
+df['PLD'] = df.pld.astype('int')
+df['PLD'] = df.PLD.astype('str') # seaborn hue needs to be a string
 
 df = df[df.threshold <= 200]
+df['percent_cover'] = df.perc_cover *100
 
 sns.set()
 sns.set_style('white')
-sns.set_context('paper')
+sns.set_context('paper', font_scale=1.5, rc={"lines.linewidth": 2})
 f = sns.lineplot(
     data = df,
     x = 'threshold',
-    y = 'perc_cover',
-    hue = 'PD',
+    y = 'percent_cover',
+    hue = 'PLD',
     #palette = 'husl'
 )
-f.set(xlabel='Threshold (particles settled per cell)', ylabel='proportion of coast with recruits')
-f.figure.savefig('recruits_perc_cover.svg')
+plt.legend([],[], frameon=False)
+f.set(xlabel='Threshold (particles settled per raster cell)', ylabel='% of coast receiving particles')
+f.figure.savefig('recruits_perc_cover.jpg')
 
 
 # get total particle count to compare next plot to
@@ -137,17 +138,43 @@ total_part = total_part * 9 # time periods
 # It is a rough total estimate though. Particles from excluded MPAs and MPAs in
 # the USA could have drifted into ok territory.
 
-df['percent_settled'] = df.total_recruits / total_part
+df['percent_settled'] = df.total_recruits / total_part * 100
 
 f = sns.lineplot(
     data = df,
     x = 'threshold',
     y = 'percent_settled',
-    hue = 'PD',
+    hue = 'PLD',
     #palette = 'husl'
 )
 plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, title='PD')
-f.set(xlabel='Threshold (particles settled per cell)', ylabel='proportion of total recruits settled')
-f.figure.savefig('recruits_total_settled.png')
+f.set(xlabel='Threshold (particles settled per raster cell)', ylabel='% of total particles release that settled on coast')
+f.figure.savefig('recruits_total_settled.jpg')
 # if legend gets cut off, just save it manually from visual studio
 
+
+
+# PLOT THEM ALL TOGETHER!!!
+sns.set(rc = {'figure.figsize':(17,8)})
+sns.set_style('white')
+sns.set_context('paper', font_scale=1.5, rc={"lines.linewidth": 2})
+fig,axs = plt.subplots(ncols=2)
+f = sns.lineplot(
+    data = df,
+    x = 'threshold',
+    y = 'percent_cover',
+    hue = 'PLD',
+    ax=axs[0]
+)
+axs[0].legend('', frameon=False)
+f.set(xlabel='Threshold (particles settled per raster cell)', ylabel='% of coast receiving particles')
+g = sns.lineplot(
+    data = df,
+    x = 'threshold',
+    y = 'percent_settled',
+    hue = 'PLD',
+    ax=axs[1]
+)
+plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, title='PLD')
+g.set(xlabel='Threshold (particles settled per raster cell)', ylabel='% of total particles released that settled on coast')
+f.figure.savefig('fig_06ab_recruits_settled.svg')
