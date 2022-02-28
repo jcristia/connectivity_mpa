@@ -198,7 +198,7 @@ r2_g <- rsq(log(predictions$distance), predictions$est)
 
 # predicted vs.observed
 ggplot(predictions, aes(x=distance, y=exp(est)))+
-  geom_abline(intercept=0, slope=1, color='blue') +
+  #geom_abline(intercept=0, slope=1, color='blue') + # maybe don't show the line
   geom_point() +
   scale_y_log10()+scale_x_log10()
 ggsave(glue('predvsobs_g_{label}.jpg'))
