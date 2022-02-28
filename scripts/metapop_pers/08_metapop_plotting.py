@@ -5,6 +5,7 @@
 import arcpy
 import pandas as pd
 import seaborn as sns
+import matplotlib.pyplot as plt
 
 gdb = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\scripts\metapop_pers\metapop_pers.gdb'
 arcpy.env.workspace = gdb
@@ -67,7 +68,7 @@ for pld in plds:
                 }, ignore_index=True)
 
 
-# plots
+# plots (multiple plots across mortality rates)
 sns.set()
 sns.set_style('white')
 sns.set_context('paper')
@@ -84,3 +85,23 @@ f = sns.relplot(
 #f.set(xscale='log')
 f.set(xlabel='Proportion of population dispersing at each timestep', ylabel='% of MPAs persistent')
 f.savefig('figs/mpas_persistent.svg')
+
+
+# Final plot for just 1 mortality rate:
+df_final = df_summary[df_summary.mortality_rate == 0.1]
+sns.set()
+sns.set_style('white')
+sns.set_context('paper', font_scale=1.25, rc={"lines.linewidth": 2})
+f = sns.relplot(
+    data = df_final,
+    x = 'disp_prop',
+    y = 'persistent_percent',
+    hue = 'pld',
+    kind='line',
+    palette = 'tab10',
+    marker='o'
+)
+f._legend.remove()
+plt.legend(title='PLD')
+f.set(xlabel='Proportion of population dispersing at each timestep', ylabel='% of MPAs persistent')
+f.savefig('figs/fig03_mpaspersistent.svg')
