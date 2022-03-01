@@ -103,5 +103,5 @@ f = sns.relplot(
 )
 f._legend.remove()
 plt.legend(title='PLD')
-f.set(xlabel='Proportion of population dispersing at each timestep', ylabel='% of MPAs persistent')
+f.set(xlabel='Proportion of population produced and \n dispersing at each timestep ($\it{d}$)', ylabel='% of MPAs persistent')
 f.savefig('figs/fig03_mpaspersistent.svg')
