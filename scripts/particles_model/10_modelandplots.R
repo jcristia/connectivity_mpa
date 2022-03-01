@@ -398,7 +398,7 @@ ggplot(p1, aes(log(total_exposure), exp(est),
   scale_colour_viridis_d(name='PLD (days)', guide = guide_legend(reverse=TRUE)) +
   scale_fill_viridis_d(name='PLD (days)', guide = guide_legend(reverse=TRUE)) +
   coord_cartesian(expand = F) +
-  labs(x = "Exposure at origin site  log(m)", y = "Predicted distance (m)")+
+  labs(x = "Exposure at origin site  log(m)", y = "Predicted dispersal distance (m)")+
   theme_classic() +
   theme(aspect.ratio=1/1.5)
 ggsave('fig07_preddistanceVexposure.jpg')
