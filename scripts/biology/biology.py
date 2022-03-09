@@ -15,9 +15,13 @@
 # active but are over a nearshore MPA.
 # This change to settlement ended up requiring a lot of changes throughout.
 
+# In the end, there is a bit of a bias in how particles get selected for mortality.
+# See the detailed note at the start of the mortality section.
+# *When prepping these notes for the Zenodo archived version, keep a simplified version of this issue that refers back to these notes in this version.*
+
 # John Cristiani
 # University of British Columbia
-# origin: 2019-04-19
+# original: 2019-04-19
 # chapter 2 updates: 2021-01-15
 
 # env: biology
@@ -382,6 +386,21 @@ def get_destination_coords(
 ###################
 # calculate mortality
 ###################
+
+# 20220309
+#I noticed an issue when looking at my least cost path lines between origin and destinations. 
+#The majority of lines go from MPA to MPA and very few show stranding on unprotected areas of the coast.
+
+#The issue goes back to the biology.py script and decisions I made. I realize now is that I have some bias in how I implemented settlement in the biology module.
+#I only apply settlement at the end of the PLD, which is correct, but since I run this function before I run the mortality function, 
+#and in the mortality function I make ones that settle on MPAs ineligible for mortality, it means that I bias my mortality towards ones that didn't settle on an MPA.
+#This was fine in the seagrass dispersal simulation since I applied settlement at every time step, but it creates a bit of bias in the MPA module.
+
+#This ISN'T an ERROR, but just a decision that I would make differently if I could go back.
+#However, it is still OK when thinking about relative rates of transfer between MPAs, but when it comes to looking at where things settle on the coast, 
+#it reduces these amounts a bit. Since I apply mortality to just ones outside of MPAs, I am applying the 15% to a smaller amount of particles, so in a way, 
+#this is like applying a higher mortality rate.
+#I think this is fine, and I don't consider this an error, but it is just something to be aware of and to fix if I ever do this again.
 
 def calc_mortality(
     mortality_rate, traj, timestep, origin_dest, time_step_output, mort_period, 
