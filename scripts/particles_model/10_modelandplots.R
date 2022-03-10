@@ -197,10 +197,13 @@ rsq <- function (x, y) cor(x, y) ^ 2
 r2_g <- rsq(log(predictions$distance), predictions$est)
 
 # predicted vs.observed
-ggplot(predictions, aes(x=distance, y=exp(est)))+
+ggplot(predictions, aes(x=distance/1000, y=exp(est)/1000))+
   #geom_abline(intercept=0, slope=1, color='blue') + # maybe don't show the line
-  geom_point() +
-  scale_y_log10()+scale_x_log10()
+  geom_point(alpha=0.01) +
+  scale_y_log10(labels = scales::number_format(accuracy = 1)) +
+  scale_x_log10(labels = scales::number_format(accuracy = 1)) +
+  labs(x = "Observed dispersal distance (km)", y = "Predicted dispersal distance (km)")+
+  theme_classic()
 ggsave(glue('predvsobs_g_{label}.jpg'))
 
 
