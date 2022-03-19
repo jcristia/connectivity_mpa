@@ -157,7 +157,8 @@ f.figure.savefig('recruits_total_settled.jpg')
 # PLOT THEM ALL TOGETHER!!!
 sns.set(rc = {'figure.figsize':(17,8)})
 sns.set_style('white')
-sns.set_context('paper', font_scale=1.5, rc={"lines.linewidth": 2})
+#sns.set_context('paper', font_scale=1.5, rc={"lines.linewidth": 2})
+sns.set_context('paper', font_scale=2, rc={"lines.linewidth": 3.5})
 fig,axs = plt.subplots(ncols=2)
 f = sns.lineplot(
     data = df,
