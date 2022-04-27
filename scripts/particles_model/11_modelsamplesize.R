@@ -230,6 +230,7 @@ for (label in labels){
 # apparently a model can IMPROVE with increasing grid resolution. I suspect that
 # this is only if you started with a very small resolution, but I will test it
 # to be sure.
+# It's because a too fine grid mesh can overfit a model.
 
 label <- '03'
 file_t = glue('{base_dir}/sample_{label}_training.feather')
