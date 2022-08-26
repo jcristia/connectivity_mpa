@@ -409,5 +409,42 @@ ggsave('fig07_preddistanceVexposure.jpg')
 
 
 
+#############################################
+#############################################
+# Proportion of variance
+# It looks like this is not fully implemented yet
+# but Sean has code for it here:
+# https://github.com/pbs-assess/sdmTMB/blob/158b4675bc4ea39d87d0da85a2970a7ea2e3ee91/scratch/r2.R
+# This follows the approach documented here:
+# https://besjournals.onlinelibrary.wiley.com/doi/epdf/10.1111/j.2041-210x.2012.00261.x
+# https://rdrr.io/cran/MuMIn/man/r.squaredGLMM.html
+# https://ecologyforacrowdedplanet.wordpress.com/2013/08/27/r-squared-in-mixed-models-the-easy-way/
+# https://www.biorxiv.org/content/10.1101/2022.04.19.488709v1.full.pdf (see how they report here on page 12)
+
+# marginal r2 - tells me how much variation my fixed effects explain
+
+fit <- m2
+
+fixef <- function(x) {
+  b <- tidy(fit)
+  stats::setNames(b$estimate, b$term)
+}
+
+fixef(fit)
+fe <- fixef(fit)
+X <- fit$tmb_data$X_ij
+VarF <- var(as.vector(fixef(fit) %*% t(X))) # variance from fixed-effects
+b <- tidy(fit, "ran_par")
+sigma_O <- b$estimate[b$term == "sigma_O"] # spatial standard deviation
+sigma_E <- b$estimate[b$term == "sigma_E"] # spatiotemporal standard deviation
+VarO <- sigma_O^2
+VarE <- sigma_E^2
+test <- residuals(fit)
+VarR <- var(as.vector(test)) # residual variance
+# THIS GIVES ME NAN. residuals() is an sdmtmb function, so I guess it is not compatible yet since I have a gamma model
+VarF/(VarF + VarO + VarE + VarR)
+VarO/(VarF + VarO + VarE + VarR)
+VarE/(VarF + VarO + VarE + VarR)
+
 
 ###########################################
