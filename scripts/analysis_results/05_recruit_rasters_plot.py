@@ -15,7 +15,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-root = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity'
+root = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity_chap2'
 out_gdb = os.path.join(root, r'scripts\analysis_results\raster_recruit_summary.gdb')
 recruit_rasters_gdb = os.path.join(root, r'cluster_results\scripts\DEST_RAST.gdb')
 coastline = os.path.join(root, r'spatial\Coastline\coastline.gdb\landmask_FINAL')
@@ -117,8 +117,8 @@ f.figure.savefig('recruits_perc_cover.jpg')
 
 
 # get total particle count to compare next plot to
-mpas = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas_shp_release\mpa_.shp'
-mpas_exclude = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity\spatial\MPA\mpas.gdb\M10_toexcludefromanalysis'
+mpas = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity_chap2\spatial\MPA\mpas_shp_release\mpa_.shp'
+mpas_exclude = r'C:\Users\jcristia\Documents\GIS\MSc_Projects\MPA_connectivity_chap2\spatial\MPA\mpas.gdb\M10_toexcludefromanalysis'
 field_names = [i.name for i in arcpy.ListFields(mpas) if i.type != 'OID']
 cursor = arcpy.da.SearchCursor(mpas, field_names)
 df_mpas = pd.DataFrame(data=[row for row in cursor], columns=field_names)
@@ -176,6 +176,6 @@ g = sns.lineplot(
     hue = 'PLD',
     ax=axs[1]
 )
-plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, title='PLD')
+plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, title='PLD (days)')
 g.set(xlabel='Threshold (particles settled per raster cell)', ylabel='% of total particles released that settled on coast')
 f.figure.savefig('fig_06ab_recruits_settled.svg')
