@@ -6,6 +6,7 @@
 !opendrift-1.4.2/
 !simulations/
 !*.pptx
+!README.md
 
 # then exclude specific folder and file types
 output
