@@ -3,6 +3,11 @@
 # Predictions
 # Plots
 
+# This script used sdmTMB updated version 0.1.4, which does not match the
+# version to develop scripts 0-8. There are some differences in how the model is
+# specified and how mpa origin id had to be made a factor for new predictions.
+
+
 
 library(tidyverse)
 library(sdmTMB)
@@ -19,10 +24,8 @@ library(glue)
 
 # feather files proportion label
 label <- '03'
-# feather files directory
-base_dir <- '~/GIS/MSc_Projects/MPA_connectivity/scripts/particles_df/output_all'
 # coastline shapefile
-land <- 'C:/Users/jcristia/Documents/GIS/MSc_Projects/MPA_connectivity/spatial/Coastline/landmask_FINAL.shp'
+land <- 'landmask_FINAL.shp'
 
 
 
@@ -30,8 +33,8 @@ land <- 'C:/Users/jcristia/Documents/GIS/MSc_Projects/MPA_connectivity/spatial/C
 ########################################
 # Data
 
-file_t = glue('{base_dir}/sample_{label}_training.feather')
-file_h = glue('{base_dir}/sample_{label}_holdout.feather')
+file_t = glue('sample_{label}_training.feather')
+file_h = glue('sample_{label}_holdout.feather')
 df_t <- read_feather(file_t) # training data
 df_h <- read_feather(file_h) # holdout data
 df_t$origin_x_km <- df_t$origin_x/1000 # km required for mesh
@@ -53,6 +56,8 @@ ggplot(df_t, aes(pld, log(distance))) +
 # datasets without 0 distances for gamma model
 df_tg <- filter(df_t, (distance > 2500 ))
 df_hog <- filter(df_h, (distance > 2500 ))
+df_tg$mpa_part_id_orig <- factor(df_tg$mpa_part_id_orig)
+df_hog$mpa_part_id_orig <- factor(df_hog$mpa_part_id_orig)
 
 # exploratory plots
 ggplot(df_tg, aes(log(distance))) +
@@ -97,13 +102,13 @@ print('Running distance model')
 start_time <- Sys.time()
 df_tg$mpa_part_id_orig <- factor(df_tg$mpa_part_id_orig)
 m2 <- sdmTMB(
-  distance ~ 1 + log(pld) + log(total_exposure) + (1|mpa_part_id_orig),
+  distance ~ 1 + log(pld) + log(total_exposure),
   data = df_tg,
-  spde = bm,
+  mesh = bm,
   family = Gamma(link='log'),
   time = 'month',
-  include_spatial = TRUE,
-  fields = "IID"
+  spatial = 'on',
+  spatiotemporal = "iid"
 )
 i <- 1
 while(i<30){ # max out at 30 optimizations
@@ -132,6 +137,7 @@ tidy(m2, conf.int = TRUE)
 # confidence intervals.
 m2$sd_report
 tidy(m2, 'ran_pars', conf.int=TRUE)
+#tidy(m2, 'ran_vals', conf.int=TRUE)
 
 
 ########################################
@@ -195,6 +201,14 @@ DHARMa::plotQQunif(r_gamma, testUniformity = FALSE, testOutliers = FALSE, testDi
 ### R-squared ###
 rsq <- function (x, y) cor(x, y) ^ 2
 r2_g <- rsq(log(predictions$distance), predictions$est)
+# R2 with holdout data
+predictions_ho <- predict(m2, newdata=df_hog)
+predictions_ho <- st_as_sf(predictions_ho, coords = c("origin_x", "origin_y"))
+predictions_ho <- st_set_crs(predictions_ho, value = "epsg:3005")
+r2_ho <- rsq(log(predictions_ho$distance), predictions_ho$est)
+
+# r2_g:  0.35488
+# r2_ho: 0.35166
 
 # predicted vs.observed
 ggplot(predictions, aes(x=distance/1000, y=exp(est)/1000))+
@@ -206,6 +220,14 @@ ggplot(predictions, aes(x=distance/1000, y=exp(est)/1000))+
   theme_classic()
 ggsave(glue('predvsobs_g_{label}.jpg'))
 
+ggplot(predictions_ho, aes(x=distance/1000, y=exp(est)/1000))+
+  #geom_abline(intercept=0, slope=1, color='blue') + # maybe don't show the line
+  geom_point(alpha=0.01) +
+  scale_y_log10(labels = scales::number_format(accuracy = 1)) +
+  scale_x_log10(labels = scales::number_format(accuracy = 1)) +
+  labs(x = "Observed dispersal distance (km)", y = "Predicted dispersal distance (km)")+
+  theme_classic()
+ggsave(glue('predvsobs_gho_{label}.jpg'))
 
 
 ########################################
@@ -406,45 +428,6 @@ ggplot(p1, aes(log(total_exposure), exp(est),
   theme(aspect.ratio=1/1.5)
 ggsave('fig07_preddistanceVexposure.jpg')
 
-
-
-
-#############################################
-#############################################
-# Proportion of variance
-# It looks like this is not fully implemented yet
-# but Sean has code for it here:
-# https://github.com/pbs-assess/sdmTMB/blob/158b4675bc4ea39d87d0da85a2970a7ea2e3ee91/scratch/r2.R
-# This follows the approach documented here:
-# https://besjournals.onlinelibrary.wiley.com/doi/epdf/10.1111/j.2041-210x.2012.00261.x
-# https://rdrr.io/cran/MuMIn/man/r.squaredGLMM.html
-# https://ecologyforacrowdedplanet.wordpress.com/2013/08/27/r-squared-in-mixed-models-the-easy-way/
-# https://www.biorxiv.org/content/10.1101/2022.04.19.488709v1.full.pdf (see how they report here on page 12)
-
-# marginal r2 - tells me how much variation my fixed effects explain
-
-fit <- m2
-
-fixef <- function(x) {
-  b <- tidy(fit)
-  stats::setNames(b$estimate, b$term)
-}
-
-fixef(fit)
-fe <- fixef(fit)
-X <- fit$tmb_data$X_ij
-VarF <- var(as.vector(fixef(fit) %*% t(X))) # variance from fixed-effects
-b <- tidy(fit, "ran_par")
-sigma_O <- b$estimate[b$term == "sigma_O"] # spatial standard deviation
-sigma_E <- b$estimate[b$term == "sigma_E"] # spatiotemporal standard deviation
-VarO <- sigma_O^2
-VarE <- sigma_E^2
-test <- residuals(fit)
-VarR <- var(as.vector(test)) # residual variance
-# THIS GIVES ME NAN. residuals() is an sdmtmb function, so I guess it is not compatible yet since I have a gamma model
-VarF/(VarF + VarO + VarE + VarR)
-VarO/(VarF + VarO + VarE + VarR)
-VarE/(VarF + VarO + VarE + VarR)
 
 
 ###########################################

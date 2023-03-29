@@ -3,6 +3,10 @@
 # determine minimal sample size needed.
 # Increase mesh size to gauge sensitivity.
 
+# This script used sdmTMB updated version 0.1.4, which does not match the 
+# version to develop scripts 0-8. There are some differences in how the model is
+# specified and how mpa origin id had to be made a factor for new predictions.
+
 
 library(tidyverse)
 library(sdmTMB)
@@ -31,7 +35,7 @@ land <- 'C:/Users/jcristia/Documents/GIS/MSc_Projects/MPA_connectivity/spatial/C
 # Average log-likelihood function
 
 ll <- function(model, newdata, response_var) {
-
+  
   # Get our observed and predicted data
   object <- model
   cv_data <- newdata
@@ -40,7 +44,7 @@ ll <- function(model, newdata, response_var) {
   cv_data$cv_predicted <- object$family$linkinv(predicted_obj$data$est)
   withheld_y <- predicted_obj$data[[response]]
   withheld_mu <- cv_data$cv_predicted
-
+  
   # Function that establishes the gamma distribution from the modeled data and then
   # gets the probabilities of drawing the observed data from it (i.e. log likelihood)
   ll_gamma <- function(object, withheld_y, withheld_mu) {
@@ -56,7 +60,7 @@ ll <- function(model, newdata, response_var) {
   } else if (family=='binomial') {
     cv_data$cv_loglik <- ll_binomial(object, withheld_y, withheld_mu)
   }
-
+  
   # This gets the sum of the probabilities. I'm not sure why it is done the way
   # it is done. Doing sum(exp(x)) should get us the same answer. We just want to
   # transform back to non-log probs and then add them. Oh well, just know that
@@ -78,53 +82,56 @@ ll <- function(model, newdata, response_var) {
 # Run
 
 for (label in labels){
-
+  
   print(paste('processing', label))
-
+  
   ########################################
   ########################################
   # Data
-
+  
   file_t = glue('{base_dir}/sample_{label}_training.feather')
   file_h = glue('{base_dir}/sample_{label}_holdout.feather')
-
+  
   df_t <- read_feather(file_t) # training data
   df_h <- read_feather(file_h) # holdout data
-
+  
   # km required for mesh
   df_t$origin_x_km <- df_t$origin_x/1000
   df_t$origin_y_km <- df_t$origin_y/1000
   df_h$origin_x_km <- df_h$origin_x/1000
   df_h$origin_y_km <- df_h$origin_y/1000
-
+  
   # datasets without 0 distances for gamma model
   df_tg <- filter(df_t, (distance > 2500 ))
   df_hog <- filter(df_h, (distance > 2500 ))
-
-
+  df_tg$mpa_part_id_orig <- factor(df_tg$mpa_part_id_orig)
+  df_hog$mpa_part_id_orig <- factor(df_hog$mpa_part_id_orig)
+  
+  
+  
   ########################################
   ########################################
   # Model
-
+  
   # Create mesh and barrier mesh
   land_sf <- st_read(land, quiet=TRUE)
   mesh <- make_mesh(df_tg, c('origin_x_km', 'origin_y_km'), cutoff = 5)
   #plot(mesh)
   bm <- add_barrier_mesh(spde_obj = mesh, barrier_sf = land_sf,
                          proj_scaling = 1000, plot=FALSE, range_fraction=0.2)
-
+  
   # sdmTMB model
   print('Running distance model')
   start_time <- Sys.time()
   df_tg$mpa_part_id_orig <- factor(df_tg$mpa_part_id_orig)
   m2 <- sdmTMB(
-    distance ~ 1 + log(pld) + log(total_exposure) + (1|mpa_part_id_orig),
+    distance ~ 1 + log(pld) + log(total_exposure),
     data = df_tg,
-    spde = bm,
+    mesh = bm,
     family = Gamma(link='log'),
     time = 'month',
-    include_spatial = TRUE,
-    fields = "IID"
+    spatial = 'on',
+    spatiotemporal = "iid"
   )
   i <- 1
   while(i<30){ # max out at 30 optimizations
@@ -140,35 +147,40 @@ for (label in labels){
   print(paste('Distance model runtime:', runtime_g))
   saveRDS(m2, glue("m_{label}_gamma.rds"))
   m2 <- readRDS(glue("m_{label}_gamma.rds"))
-
-
+  
+  
   ########################################
   ########################################
   # Evaluate model
-
+  
   # Predict
   #predictions <- predict(m2)
   predictions <- predict(m2, m2$data %>% filter(pld==10))   # filtered for just 1 PLD
   predictions <- st_as_sf(predictions, coords = c("origin_x", "origin_y"))
   predictions <- st_set_crs(predictions, value = "epsg:3005")
-
+  
   # R-squared
   rsq <- function (x, y) cor(x, y) ^ 2
   r2_g <- rsq(log(predictions$distance), predictions$est)
-
+  # R2 with holdout data
+  predictions_ho <- predict(m2, newdata=df_hog)
+  predictions_ho <- st_as_sf(predictions_ho, coords = c("origin_x", "origin_y"))
+  predictions_ho <- st_set_crs(predictions_ho, value = "epsg:3005")
+  r2_ho <- rsq(log(predictions_ho$distance), predictions_ho$est)
+  
   # average log likelihood
   ll_g <- ll(m2, m2$data, 'distance')
   df_hog$mpa_part_id_orig <- factor(df_hog$mpa_part_id_orig)
   ll_g_ho <- ll(m2, df_hog, 'distance')
-
-
+  
+  
   ########################################
   ########################################
   ### Compile df and write to csv ###
-
+  
   m2_df <- tidy(m2)
   m2_df_rand <- tidy(m2, effects=c('ran_pars'))
-
+  
   # general fields
   samp_frac = strtoi(label) * (10^-(nchar(label)))
   # gamma model fields
@@ -187,14 +199,15 @@ for (label in labels){
   loglik_ga_tr = ll_g
   loglik_ga_ho = ll_g_ho
   r2_ga = r2_g
-
+  r2_hoa = r2_ho
+  
   # df
   df_m1 <- data.frame(samp_frac,
                       length_ga_tr, length_ga_ho, runtime_ga, intercept_ga,
                       cof_pld_ga, se_pld_ga, cof_exposure_ga, se_exposure_ga,
                       mrp_ga, disp_ga, spat_sd_ga, spatemp_sd_ga, loglik_ga_tr,
-                      loglik_ga_ho, r2_ga)
-
+                      loglik_ga_ho, r2_ga, r2_hoa)
+  
   # write to csv
   tbl_res <- 'tbl_res.csv'
   if (!file.exists(tbl_res)) {
@@ -204,8 +217,8 @@ for (label in labels){
     dfr <- rbind(dfr, df_m1)
     write.csv(dfr, tbl_res, row.names=FALSE)
   }
-
-
+  
+  
 }
 ###########################################
 
@@ -244,29 +257,31 @@ df_h$origin_y_km <- df_h$origin_y/1000
 # datasets without 0 distances for gamma model
 df_tg <- filter(df_t, (distance > 2500 ))
 df_hog <- filter(df_h, (distance > 2500 ))
+df_tg$mpa_part_id_orig <- factor(df_tg$mpa_part_id_orig)
+df_hog$mpa_part_id_orig <- factor(df_hog$mpa_part_id_orig)
 
 # Model
 cutoffs <- list(5, 7, 10, 20)
 for (cutoff in cutoffs){
-
+  
   print(paste('processing cutoff', toString(cutoff)))
-
+  
   # Create mesh and barrier mesh
   land_sf <- st_read(land, quiet=TRUE)
   mesh <- make_mesh(df_tg, c('origin_x_km', 'origin_y_km'), cutoff = cutoff)
   bm <- add_barrier_mesh(spde_obj = mesh, barrier_sf = land_sf,
                          proj_scaling = 1000, plot=FALSE, range_fraction=0.2)
-
+  
   start_time <- Sys.time()
   df_tg$mpa_part_id_orig <- factor(df_tg$mpa_part_id_orig)
   m2 <- sdmTMB(
-    distance ~ 1 + log(pld) + log(total_exposure) + (1|mpa_part_id_orig),
+    distance ~ 1 + log(pld) + log(total_exposure),
     data = df_tg,
-    spde = bm,
+    mesh = bm,
     family = Gamma(link='log'),
     time = 'month',
-    include_spatial = TRUE,
-    fields = "IID"
+    spatial = 'on',
+    spatiotemporal = "iid"
   )
   i <- 1
   while(i<11){ # max out at 10 optimizations
@@ -282,27 +297,32 @@ for (cutoff in cutoffs){
   cutoff_str <- toString(cutoff)
   saveRDS(m2, glue("m_{label}_gamma_grid{cutoff_str}.rds"))
   m2 <- readRDS(glue("m_{label}_gamma_grid{cutoff_str}.rds"))
-
+  
   # Predict
   #predictions <- predict(m2)
   predictions <- predict(m2, m2$data %>% filter(pld==10))   # filtered for just 1 PLD
   predictions <- st_as_sf(predictions, coords = c("origin_x", "origin_y"))
   predictions <- st_set_crs(predictions, value = "epsg:3005")
-
+  
   # R-squared
   rsq <- function (x, y) cor(x, y) ^ 2
   r2_g <- rsq(log(predictions$distance), predictions$est)
-
+  # R2 with holdout data
+  predictions_ho <- predict(m2, newdata=df_hog)
+  predictions_ho <- st_as_sf(predictions_ho, coords = c("origin_x", "origin_y"))
+  predictions_ho <- st_set_crs(predictions_ho, value = "epsg:3005")
+  r2_ho <- rsq(log(predictions_ho$distance), predictions_ho$est)
+  
   # average log likelihood
   ll_g <- ll(m2, m2$data, 'distance')
   df_hog$mpa_part_id_orig <- factor(df_hog$mpa_part_id_orig)
   ll_g_ho <- ll(m2, df_hog, 'distance')
-
+  
   ### Compile df and write to csv ###
-
+  
   m2_df <- tidy(m2)
   m2_df_rand <- tidy(m2, effects=c('ran_pars'))
-
+  
   # general fields
   samp_frac = strtoi(label) * (10^-(nchar(label)))
   grid_res = cutoff
@@ -322,14 +342,15 @@ for (cutoff in cutoffs){
   loglik_ga_tr = ll_g
   loglik_ga_ho = ll_g_ho
   r2_ga = r2_g
-
+  r2_hoa = r2_ho
+  
   # df
   df_m1 <- data.frame(samp_frac, cutoff,
                       length_ga_tr, length_ga_ho, runtime_ga, intercept_ga,
                       cof_pld_ga, se_pld_ga, cof_exposure_ga, se_exposure_ga,
                       mrp_ga, disp_ga, spat_sd_ga, spatemp_sd_ga, loglik_ga_tr,
-                      loglik_ga_ho, r2_ga)
-
+                      loglik_ga_ho, r2_ga, r2_hoa)
+  
   # write to csv
   tbl_res <- 'tbl_res_gridresolution.csv'
   if (!file.exists(tbl_res)) {
@@ -339,7 +360,7 @@ for (cutoff in cutoffs){
     dfr <- rbind(dfr, df_m1)
     write.csv(dfr, tbl_res, row.names=FALSE)
   }
-
+  
 }
 ###########################################
 
@@ -354,7 +375,6 @@ for (cutoff in cutoffs){
 
 
 ###########################################
-
 
 
 

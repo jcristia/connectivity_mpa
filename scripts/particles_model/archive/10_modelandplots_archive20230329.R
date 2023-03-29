@@ -1,23 +1,7 @@
-# Cleaned up version pulling together all the pieces from the previous scripts.
 
-# This script also does one final test of including mpa origin ID as a random
-# effect. This came up later in the review process.
-
-# While R2 and log likelihood were slightly better when including MPA ID, this
-# was only for the training data. When testing with hold out data, R2 remains
-# much higher with the model that does not include MPA ID. I missed this before
-# because I was only calculating log likelihood with the holdout data.
-
-# The MPA ID random intercept might have worked well for the training data, but
-# by including it, I overfit the model, so that model can't predict as well with
-# holdout data. This is perhaps for small area MPAs where only a few particles
-# where used to train, but then the holdout has much different distance ones.
-# Either way, the MPA ID only minimally improved the model.
-
-# Also, note...
-# This script used sdmTMB updated version 0.1.4, which does not match the
-# version to develop scripts 0-8. There are some differences in how the model is
-# specified and how mpa origin id had to be made a factor for new predictions.
+# Summarize model selection
+# Predictions
+# Plots
 
 
 library(tidyverse)
@@ -35,8 +19,10 @@ library(glue)
 
 # feather files proportion label
 label <- '03'
+# feather files directory
+base_dir <- '~/GIS/MSc_Projects/MPA_connectivity/scripts/particles_df/output_all'
 # coastline shapefile
-land <- 'landmask_FINAL.shp'
+land <- 'C:/Users/jcristia/Documents/GIS/MSc_Projects/MPA_connectivity/spatial/Coastline/landmask_FINAL.shp'
 
 
 
@@ -44,8 +30,8 @@ land <- 'landmask_FINAL.shp'
 ########################################
 # Data
 
-file_t = glue('sample_{label}_training.feather')
-file_h = glue('sample_{label}_holdout.feather')
+file_t = glue('{base_dir}/sample_{label}_training.feather')
+file_h = glue('{base_dir}/sample_{label}_holdout.feather')
 df_t <- read_feather(file_t) # training data
 df_h <- read_feather(file_h) # holdout data
 df_t$origin_x_km <- df_t$origin_x/1000 # km required for mesh
@@ -67,8 +53,6 @@ ggplot(df_t, aes(pld, log(distance))) +
 # datasets without 0 distances for gamma model
 df_tg <- filter(df_t, (distance > 2500 ))
 df_hog <- filter(df_h, (distance > 2500 ))
-df_tg$mpa_part_id_orig <- factor(df_tg$mpa_part_id_orig)
-df_hog$mpa_part_id_orig <- factor(df_hog$mpa_part_id_orig)
 
 # exploratory plots
 ggplot(df_tg, aes(log(distance))) +
@@ -83,7 +67,7 @@ ggplot(df_tg, aes(total_exposure, distance)) +
 
 ########################################
 ########################################
-# Model (with mpa ID as a random effect)
+# Model
 
 # Create mesh and barrier mesh
 land_sf <- st_read(land, quiet=TRUE)
@@ -92,21 +76,37 @@ mesh <- make_mesh(df_tg, c('origin_x_km', 'origin_y_km'), cutoff = 5)
 bm <- add_barrier_mesh(spde_obj = mesh, barrier_sf = land_sf,
                        proj_scaling = 1000, plot=FALSE, range_fraction=0.2)
 
-# run sdmTMB model
+
+# Summary of model selection from previous scripts:
+# Given the structure of my question, I already knew that my model will include
+# PLD and total_exposure. Therefore, varying the model only involved:
+# - log(), sqrt(), ()**2, or no adjustment on pld and exposure
+# - with and without space and time as sdmtmb random effects
+# - with and without mpa_part_id_orig as a random effect
+
+# See the 'archive' folder for the history of this testing. Model selection is
+# not a focus of this chapter since I'm not trying to select the 'best' model to
+# predict dispersal distance. Instead, I want to answer "Is there a
+# relationship between dispersal distance and pld/exposure?".
+# Therefore, I'm not including the history of model selection in this final
+# script.
+
+
+# sdmTMB model
 print('Running distance model')
 start_time <- Sys.time()
 df_tg$mpa_part_id_orig <- factor(df_tg$mpa_part_id_orig)
 m2 <- sdmTMB(
   distance ~ 1 + log(pld) + log(total_exposure) + (1|mpa_part_id_orig),
   data = df_tg,
-  mesh = bm,
+  spde = bm,
   family = Gamma(link='log'),
   time = 'month',
-  spatial = 'on',
-  spatiotemporal = "iid"
+  include_spatial = TRUE,
+  fields = "IID"
 )
 i <- 1
-while(i<11){ # max out at 10 optimizations
+while(i<30){ # max out at 30 optimizations
   if(max(m2$gradients)>0.01){
     print("Running extra optimization")
     m2 <- sdmTMB::run_extra_optimization(m2, nlminb_loops = 1L, newton_loops = 1L)
@@ -115,121 +115,96 @@ while(i<11){ # max out at 10 optimizations
   i <- i+1
 }
 end_time <- Sys.time()
-runtime_g <- end_time - start_time
+runtime_g <- (end_time - start_time)[[1]]
 print(paste('Distance model runtime:', runtime_g))
 saveRDS(m2, glue("m_{label}_gamma.rds"))
 m2 <- readRDS(glue("m_{label}_gamma.rds"))
 
 # model summary
 m2
-tidy(m2)
+tidy(m2, conf.int = TRUE)
 # Matern range scale: it is in km and tells you the distance that two points can
 # be considered the same.
-# For my coefficient estimates, I also get a standard error (se). I can tell if
-# my coefficients are significant by subtracting se*2 from them. If this doesn't
-# overlap with zero, then it is a significant relationship.
+# Standard error (se): +/- se*2 from coefficients. Significant relationship if
+# it doesn't overlap with zero.
+
+# Get the spatial and spatiotemporal SD values and the
+# confidence intervals.
+m2$sd_report
+tidy(m2, 'ran_pars', conf.int=TRUE)
 
 
 ########################################
 ########################################
-# Model (WITHOUT mpa ID as a random effect)
-#
-# This was a last minute evaluation 2023-03-24
-#
-
-print('Running distance model')
-start_time <- Sys.time()
-m3 <- sdmTMB(
-  distance ~ 1 + log(pld) + log(total_exposure),
-  data = df_tg,
-  mesh = bm,
-  family = Gamma(link='log'),
-  time = 'month',
-  spatial = 'on',
-  spatiotemporal = "iid"
-)
-i <- 1
-while(i<11){ # max out at 10 optimizations
-  if(max(m3$gradients)>0.01){
-    print("Running extra optimization")
-    m3 <- sdmTMB::run_extra_optimization(m3, nlminb_loops = 1L, newton_loops = 1L)
-    print(max(m3$gradients))
-  }
-  i <- i+1
-}
-end_time <- Sys.time()
-runtime_g <- end_time - start_time
-print(paste('Distance model runtime:', runtime_g))
-saveRDS(m3, glue("m_{label}_gamma_noMPAid.rds"))
-m3 <- readRDS(glue("m_{label}_gamma_noMPAid.rds"))
-
-# model summary
-m3
-tidy(m3)
-
-
-
-########################################
-########################################
-# Evaluate models
-########################################
-########################################
-
-
-
-########################################
-########################################
-# R2
+# Evaluate model
 
 ### Predict ###
 predictions <- predict(m2)
 predictions <- st_as_sf(predictions, coords = c("origin_x", "origin_y"))
 predictions <- st_set_crs(predictions, value = "epsg:3005")
 
-predictions_noID <- predict(m3)
-predictions_noID <- st_as_sf(predictions_noID, coords = c("origin_x", "origin_y"))
-predictions_noID <- st_set_crs(predictions_noID, value = "epsg:3005")
+### Residuals - traditional ###
+# need to run this with full model predictions
+filename <- glue('g_{label}.jpg')
+predictions$residuals <- residuals(m2)
+ggplot(predictions, aes(sample=residuals)) + stat_qq_line() + stat_qq()
+ggsave(paste('qqnorm_', filename, sep=''))
+ggplot(predictions, aes(residuals)) + geom_density()
+ggsave(paste('pdf_', filename, sep=''))
+ggplot(predictions, aes(x = log(distance), y = residuals)) + geom_point()
+ggsave(paste('resid_', filename, sep=''))
 
+ggplot(predictions, aes(x = log(pld), y = residuals)) + geom_jitter() # residual issues at higher PLDs
+ggsave(paste('residpld_', filename, sep=''))
+ggplot(predictions, aes(x = log(total_exposure), y = residuals)) + geom_point() # this kinda looks ok,
+# and it confirms that all my variability is happening when there are higher
+# exposure values, which kinda makes sense: when low exposure, things only go
+# a short distance, but when high exposure things go short and long distances
+# and it is hard to predict.
+ggsave(paste('residexposure_', filename, sep=''))
+
+### Residuals - GLMMs ###
+# https://pbs-assess.github.io/sdmTMB/articles/residual-checking.html
+s_gamma <- simulate(m2, nsim = 500)
+dim(s_gamma)
+pred_fixed <- m2$family$linkinv(predict(m2)$est_non_rf)
+r_gamma <- DHARMa::createDHARMa(
+  simulatedResponse = s_gamma,
+  observedResponse = df_tg$distance,
+  fittedPredictedResponse = pred_fixed)
+plot(r_gamma, quantreg=FALSE)
+DHARMa::testResiduals(r_gamma)
+DHARMa::plotQQunif(r_gamma, testUniformity = FALSE, testOutliers = FALSE, testDispersion = FALSE)
+
+
+# Interpreting:
+# The qqplot doesn't look terrible, but...
+# The dispersion of expected data differs significantly from that of the observed,
+# there are more outliers than expected.
+# However, is it a problem?
+# The qqplot actually looks pretty good.
+# Either way, it's not going to change my conclusion - that the model isn't
+# adequate to predict, but we do see a relationship.
+
+# See "General remarks on interpreting residual patterns and tests"
+# https://cran.r-project.org/web/packages/DHARMa/vignettes/DHARMa.html
+# "There are many situations in statistics where it is common practice to work with “wrong models”. For example, many statistical models used shrinkage estimators, which purposefully bias parameter estimates to certain values. Random effects are a special case of this. If DHARMa residuals for these estimators are calculated, they will often show a slight pattern in the residuals even if the model is correctly specified, and tests for this can get significant for large sample sizes. "
+#"Significance in hypothesis tests depends on at least 2 ingredients: strength of the signal, and the number of data points. If you have a lot of data points, residual diagnostics will nearly inevitably become significant, because having a perfectly fitting model is very unlikely. That, however, doesn’t necessarily mean that you need to change your model. "
+# "Important conclusion: DHARMa only flags a difference between the observed and expected data - the user has to decide whether this difference is actually a problem for the analysis!"
 
 ### R-squared ###
 rsq <- function (x, y) cor(x, y) ^ 2
-
-# Model with mpa id as random effect
-# R2 with training data
-r2_t <- rsq(log(predictions$distance), predictions$est)
-# R2 with holdout data
-predictions_ho <- predict(m2, newdata=df_hog)
-predictions_ho <- st_as_sf(predictions_ho, coords = c("origin_x", "origin_y"))
-predictions_ho <- st_set_crs(predictions_ho, value = "epsg:3005")
-r2_ho <- rsq(log(predictions_ho$distance), predictions_ho$est)
-
-# Model without mpa id as random effect
-# R2 with training data
-r2_t_noID <- rsq(log(predictions_noID$distance), predictions_noID$est)
-# R2 with holdout data
-predictions_noID_ho <- predict(m3, newdata=df_hog)
-predictions_noID_ho <- st_as_sf(predictions_noID_ho, coords = c("origin_x", "origin_y"))
-predictions_noID_ho <- st_set_crs(predictions_noID_ho, value = "epsg:3005")
-r2_ho_noID <- rsq(log(predictions_noID_ho$distance), predictions_noID_ho$est)
-
-# r2_t: 0.36
-# r2_ho: 0.22
-# r2_t_noID: 0.35488
-# r2_ho_noID: 0.3516654
-
-# INTERPRETATION
-# Yes the model WITHOUT the MPA ID as a random effect is a better model for the
-# holdout data. I was likely overfitting when using MPA ID.
+r2_g <- rsq(log(predictions$distance), predictions$est)
 
 # predicted vs.observed
-ggplot(predictions_noID, aes(x=distance, y=exp(est)))+
-  geom_abline(intercept=0, slope=1, color='blue') +
-  geom_point() +
-  scale_y_log10()+scale_x_log10()
-ggplot(predictions_noID_ho, aes(x=distance, y=exp(est)))+
-  geom_abline(intercept=0, slope=1, color='blue') +
-  geom_point() +
-  scale_y_log10()+scale_x_log10()
+ggplot(predictions, aes(x=distance/1000, y=exp(est)/1000))+
+  #geom_abline(intercept=0, slope=1, color='blue') + # maybe don't show the line
+  geom_point(alpha=0.01) +
+  scale_y_log10(labels = scales::number_format(accuracy = 1)) +
+  scale_x_log10(labels = scales::number_format(accuracy = 1)) +
+  labs(x = "Observed dispersal distance (km)", y = "Predicted dispersal distance (km)")+
+  theme_classic()
+ggsave(glue('predvsobs_g_{label}.jpg'))
 
 
 
@@ -283,60 +258,6 @@ ll <- function(model, newdata, response_var) {
 ll_g <- ll(m2, m2$data, 'distance')
 ll_g_ho <- ll(m2, df_hog, 'distance')
 
-ll_noID_g <- ll(m3, m3$data, 'distance')
-ll_noID_g_ho <- ll(m3, df_hog, 'distance')
-
-# not a lot of difference I guess, but the noID hold out data comes out better
-
-
-
-########################################
-########################################
-# Residuals
-
-### Residuals - traditional ###
-filename <- glue('g_{label}.jpg')
-predictions_noID$residuals <- residuals(m3)
-ggplot(predictions_noID, aes(sample=residuals)) + stat_qq_line() + stat_qq()
-ggsave(paste('qqnorm_', filename, sep=''))
-ggplot(predictions_noID, aes(residuals)) + geom_density()
-ggsave(paste('pdf_', filename, sep=''))
-ggplot(predictions_noID, aes(x = log(distance), y = residuals)) + geom_point()
-ggsave(paste('resid_', filename, sep=''))
-
-ggplot(predictions_noID, aes(x = log(pld), y = residuals)) + geom_jitter() # residual issues at higher PLDs
-ggplot(predictions_noID, aes(x = log(total_exposure), y = residuals)) + geom_point() # this kinda looks ok
-
-### Residuals - GLMMs ###
-# https://pbs-assess.github.io/sdmTMB/articles/residual-checking.html
-s_gamma <- simulate(m3, nsim = 500)
-dim(s_gamma)
-pred_fixed <- m3$family$linkinv(predict(m3)$est_non_rf)
-r_gamma <- DHARMa::createDHARMa(
-  simulatedResponse = s_gamma,
-  observedResponse = df_tg$distance,
-  fittedPredictedResponse = pred_fixed)
-plot(r_gamma, quantreg=FALSE)
-DHARMa::testResiduals(r_gamma)
-DHARMa::plotQQunif(r_gamma, testUniformity = FALSE, testOutliers = FALSE, testDispersion = FALSE)
-
-
-# So in interpreting all of this:
-# The qqplot doesn't look terrible, but...
-# The dispersion of expected data differs significantly from that of the observed,
-# There are more outliers than expected.
-# However, is it a problem?
-# The qqplot actually looks pretty good.
-# Either way, it's not going to change my conclusion - that the model isn't
-# adequate to predict, but we do see some relationship.
-
-# See "General remarks on interpreting residual patterns and tests"
-# https://cran.r-project.org/web/packages/DHARMa/vignettes/DHARMa.html
-# "There are many situations in statistics where it is common practice to work with “wrong models”. For example, many statistical models used shrinkage estimators, which purposefully bias parameter estimates to certain values. Random effects are a special case of this. If DHARMa residuals for these estimators are calculated, they will often show a slight pattern in the residuals even if the model is correctly specified, and tests for this can get significant for large sample sizes. "
-#"Significance in hypothesis tests depends on at least 2 ingredients: strength of the signal, and the number of data points. If you have a lot of data points, residual diagnostics will nearly inevitably become significant, because having a perfectly fitting model is very unlikely. That, however, doesn’t necessarily mean that you need to change your model. "
-# "Important conclusion: DHARMa only flags a difference between the observed and expected data - the user has to decide whether this difference is actually a problem for the analysis!"
-
-
 
 
 ##########################################
@@ -345,15 +266,16 @@ DHARMa::plotQQunif(r_gamma, testUniformity = FALSE, testOutliers = FALSE, testDi
 
 
 # Plot predictions for just 1 PLD (median values).
-predictions_noID <- predict(m3, m3$data %>% filter(pld==10))   # filtered for just 1 PLD
-predictions_noID <- st_as_sf(predictions_noID, coords = c("origin_x", "origin_y"))
-predictions_noID <- st_set_crs(predictions_noID, value = "epsg:3005")
+predictions <- predict(m2, m2$data %>% filter(pld==10))   # filtered for just 1 PLD
+predictions <- st_as_sf(predictions, coords = c("origin_x", "origin_y"))
+predictions <- st_set_crs(predictions, value = "epsg:3005")
 # PLD is independent of exposure (they don't interact, they are just additive),
 # so PLD just raises and lowers my total values proportionally anyways.
 # Therefore, just show results for 1 pld value.
+# This also makes the points on the map easier to see and understand.
 
 # Fixed effects + all random effects
-predictions_noID %>%
+predictions %>%
   ggplot()+
   geom_sf(aes(color = exp(est)))+
   scale_color_viridis_c(trans = "log10")+
@@ -365,10 +287,7 @@ predictions_noID %>%
 
 # Fixed effects (i.e. just the effect of exposure on distance)
 # No month included, since that is a random effect.
-# To ask Patrick:  how do we interpret this? E.g. If we only predict based on
-# fixed effects, here are the distances predicted? (see edge of Gulf Islands,
-# fixed effects don't predict the large distance they will travel).
-predictions_noID %>%
+predictions %>%
   ggplot()+
   geom_sf(aes(color = exp(est_non_rf)))+
   scale_color_viridis_c()+
@@ -381,10 +300,9 @@ predictions_noID %>%
 # time that are not accounted for by our fixed effects. In other words, these
 # deviations represent consistent biotic and abiotic factors that are affecting
 # distance but are not accounted for in the model"
-# To ask Patrick: how would you describe omega_s? I see it is positive and
-# negative. Does it just indicate a relative magnitude and direction in terms of
-# the deviation from the fixed effect prediction?
-predictions_noID %>%
+# omega_s - indicates a relative magnitude and direction in terms of the
+# deviation from the fixed effect prediction?
+predictions %>%
   ggplot()+
   geom_sf(aes(color = (omega_s)))+
   scale_color_viridis_c()+
@@ -398,7 +316,7 @@ predictions_noID %>%
 # "random effects that represent deviation from the fixed effect predictions and
 # the spatial random effect deviations. These represent biotic and abiotic
 # factors that are changing through time and are not accounted for in the model."
-predictions_noID %>%
+predictions %>%
   ggplot()+
   geom_sf(aes(color = (epsilon_st)))+
   scale_color_viridis_c()+
@@ -410,8 +328,8 @@ predictions_noID %>%
 # disappears in May, then we see it higher in the Salish Sea in August.
 
 
-# Export model so that I can make these maps pretty in ArcGIS
-pred_out <- predictions_noID %>% st_drop_geometry() # you get errors in arc if this column is kept in
+# Export model predictions so that I can make these maps pretty in ArcGIS
+pred_out <- predictions %>% st_drop_geometry() # you get errors in arc if this column is kept in
 pred_out['origin_x'] <- pred_out$origin_x_km * 1000
 pred_out['origin_y'] <- pred_out$origin_y_km * 1000
 pred_out['est_km'] <- exp(pred_out$est) / 1000
@@ -421,11 +339,11 @@ pred_out['est_non_rf_km'] <- exp(pred_out$est_non_rf) / 1000
 # omega_s contribution is applied after fixed effects
 # then epsilon_st is the remaining difference.
 # I'm not sure about this and need to look into it further.
-# Patrick doesn't think that this is right. Sean does plot just exp(est_non_rf),
-# but Patrick thinks that this was just for illustrative purposes and that
-# you can't convert this to any meaningful values.
-pred_out['omegas_km'] <- exp(pred_out$est_non_rf + pred_out$omega_s)/1000 - pred_out$est_non_rf_km
-pred_out['epsilonst_km'] <- pred_out$est_km - pred_out$omegas_km - pred_out$est_non_rf_km
+# Patrick doesn't think that this is right. Sean does plot just exp(est_non_rf)
+# in one of his examples, but Patrick thinks that this was just for illustrative
+# purposes and that you can't convert this to any meaningful values.
+#pred_out['omegas_km'] <- exp(pred_out$est_non_rf + pred_out$omega_s)/1000 - pred_out$est_non_rf_km
+#pred_out['epsilonst_km'] <- pred_out$est_km - pred_out$omegas_km - pred_out$est_non_rf_km
 write.csv(pred_out, 'predictions.csv')
 
 
@@ -440,12 +358,12 @@ write.csv(pred_out, 'predictions.csv')
 # build dataframe
 # Must include: exposure, pld, mpa_part_id_orig
 # Must also include a time value.
-# Ideally, I would 50 exposure values per mpa per PLD.
 min_exposure = log(min(df_tg$total_exposure))
 max_exposure = log(max(df_tg$total_exposure))
 gradient <- seq(min_exposure, max_exposure,length.out=25)
 gradient <- exp(gradient)
-mpa_unique <- sample(unique(df_tg$mpa_part_id_orig),5)
+mpa_unique <- sample(unique(df_tg$mpa_part_id_orig),5) # this doesn't end up
+# mattering for the way I make the plot
 pld_vals <- c(1,3,7,10,21,30,40,60)
 month <- 5L
 # expand.grid creates a dataframe of all unique combinations
@@ -459,15 +377,14 @@ predictor_df <- expand.grid(
 # Predict
 # re_form=NA excludes spatial/spatiotemporal random effects, and therefore, we
 # don't need to include any coordinates.
-# re_form_iid=NA gives us population level predictions (so it excludes mpa_origin_id
-# from the predictions).
+# re_form_iid=NA gives us population level predictions (so it excludes
+# mpa_origin_id from the predictions).
 p1 <- predict(m2, predictor_df, se_fit=TRUE, re_form=NA, re_form_iid=NA)
 
 # test it without re_form_iid. This will give us individual results, but how
 # would I plot this? I suppose by excluding mpa id I am missing out on showing
 # a lot of the variation between mpas.
-# This will be a question for Patrick.
-p2 <- predict(m2, predictor_df, se_fit=TRUE, re_form=NA)
+#p2 <- predict(m2, predictor_df, se_fit=TRUE, re_form=NA)
 
 # print out p1 and p2 to see the difference.
 
@@ -484,13 +401,50 @@ ggplot(p1, aes(log(total_exposure), exp(est),
   scale_colour_viridis_d(name='PLD (days)', guide = guide_legend(reverse=TRUE)) +
   scale_fill_viridis_d(name='PLD (days)', guide = guide_legend(reverse=TRUE)) +
   coord_cartesian(expand = F) +
-  labs(x = "Exposure at origin site  log(m)", y = "Predicted distance (m)")+
+  labs(x = "Exposure at origin site  log(m)", y = "Predicted dispersal distance (m)")+
   theme_classic() +
   theme(aspect.ratio=1/1.5)
-#ggsave('fig07_preddistanceVexposure.jpg')
+ggsave('fig07_preddistanceVexposure.jpg')
 
 
 
+
+#############################################
+#############################################
+# Proportion of variance
+# It looks like this is not fully implemented yet
+# but Sean has code for it here:
+# https://github.com/pbs-assess/sdmTMB/blob/158b4675bc4ea39d87d0da85a2970a7ea2e3ee91/scratch/r2.R
+# This follows the approach documented here:
+# https://besjournals.onlinelibrary.wiley.com/doi/epdf/10.1111/j.2041-210x.2012.00261.x
+# https://rdrr.io/cran/MuMIn/man/r.squaredGLMM.html
+# https://ecologyforacrowdedplanet.wordpress.com/2013/08/27/r-squared-in-mixed-models-the-easy-way/
+# https://www.biorxiv.org/content/10.1101/2022.04.19.488709v1.full.pdf (see how they report here on page 12)
+
+# marginal r2 - tells me how much variation my fixed effects explain
+
+fit <- m2
+
+fixef <- function(x) {
+  b <- tidy(fit)
+  stats::setNames(b$estimate, b$term)
+}
+
+fixef(fit)
+fe <- fixef(fit)
+X <- fit$tmb_data$X_ij
+VarF <- var(as.vector(fixef(fit) %*% t(X))) # variance from fixed-effects
+b <- tidy(fit, "ran_par")
+sigma_O <- b$estimate[b$term == "sigma_O"] # spatial standard deviation
+sigma_E <- b$estimate[b$term == "sigma_E"] # spatiotemporal standard deviation
+VarO <- sigma_O^2
+VarE <- sigma_E^2
+test <- residuals(fit)
+VarR <- var(as.vector(test)) # residual variance
+# THIS GIVES ME NAN. residuals() is an sdmtmb function, so I guess it is not compatible yet since I have a gamma model
+VarF/(VarF + VarO + VarE + VarR)
+VarO/(VarF + VarO + VarE + VarR)
+VarE/(VarF + VarO + VarE + VarR)
 
 
 ###########################################
