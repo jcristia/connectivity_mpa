@@ -179,3 +179,34 @@ g = sns.lineplot(
 plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0, title='PLD (days)')
 g.set(xlabel='Threshold (particles settled per raster cell)', ylabel='% of total particles released that settled on coast')
 f.figure.savefig('fig_06ab_recruits_settled.svg')
+
+
+
+# Additional analysis following CJFAS review
+# Calculate the percent of coastline that is not protected to add context to the
+# results.
+
+# total cell count. They are all 1s.
+with arcpy.da.SearchCursor('coastline_rast', ['Value', 'Count']) as cursor:
+    for row in cursor:
+        if row[0]==1:
+            total_cells = row[1]
+# total cells: 10025
+
+mpa_rast = os.path.join(recruit_rasters_gdb, 'Con_MB06_mpa1')
+
+# MPA rast is already 0
+# Coast rast is 1
+outras = Raster('coastline_rast') * Raster(mpa_rast)
+outras.save('coastline_mpas')
+
+# count cells
+with arcpy.da.SearchCursor('coastline_mpas', ['Value', 'Count']) as cursor:
+    for row in cursor:
+        if row[0]==0:
+            cell_count = row[1]
+# cell count: 3384
+
+# Proportion of coast that is not protected:
+coast_not_protected = (total_cells - cell_count) / total_cells
+# coast_not_protected: 66%
