@@ -19,6 +19,7 @@ scripts/distance_analysis/distance_analysis_mapping
 scripts/distance_analysis/components_mapping
 scripts/distance_analysis/conns_established_mapping
 scripts/particles_model/.Rproj.user
+scripts/analysis_results/abalone_habitatsuit
 *PT_emails.txt
 
 *.csv
@@ -38,6 +39,8 @@ scripts/particles_model/.Rproj.user
 *.png
 *.svg
 *.feather
+*.pgwx
+*.png.aux.xml
 
 *.pyc
 
