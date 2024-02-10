@@ -41,6 +41,7 @@ scripts/analysis_results/abalone_habitatsuit
 *.feather
 *.pgwx
 *.png.aux.xml
+*.tif
 
 *.pyc
 
@@ -56,3 +57,4 @@ scripts/analysis_results/abalone_habitatsuit
 
 *.code-workspace
 *settings.json
+scripts/analysis_results/figformatting_instructions.txt
